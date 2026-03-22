@@ -514,7 +514,7 @@
     .stadium-seat {
       position: absolute;
       border: 2px solid #ffffff;
-      border-radius: 8px;
+      border-radius: 12px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -526,12 +526,12 @@
       transform-origin: center center;
       text-align: center;
       padding: 4px 5px;
-      width: 78px;
-      height: 54px;
+      width: 84px;
+      height: 56px;
     }
 
     .stadium-seat.grandstand {
-      width: 72px;
+      width: 76px;
       height: 46px;
     }
 
@@ -756,12 +756,12 @@
       }
 
       .stadium-seat {
-        width: 58px;
-        height: 42px;
+        width: 62px;
+        height: 44px;
       }
 
       .stadium-seat.grandstand {
-        width: 52px;
+        width: 56px;
         height: 36px;
       }
 
@@ -1535,26 +1535,34 @@
       function getSeatLayout(seat) {
         if (seat.grandstand) {
           const index = clamp(Number.parseInt(seat.id.replace("GS", ""), 10) - 1, 0, 11);
-          const start = 210;
-          const span = 120;
+          const start = 206;
+          const span = 128;
           const step = span / 11;
           const angle = start + index * step;
-          const wobble = index % 2 === 0 ? 8 : -8;
+          const wobble = index % 2 === 0 ? 4 : -4;
           return {
             angle,
-            radius: 356 + wobble
+            radius: 334 + wobble
           };
         }
 
         const row = seat.id.charAt(0);
         const seatNo = clamp(Number.parseInt(seat.id.slice(1), 10) - 1, 0, 7);
-        const rowIndex = Math.max(0, rows.indexOf(row));
-        const angleStart = -148;
-        const angleSpan = 296;
-        const step = angleSpan / 7;
+        const rowIndex = Math.max(0, rows.indexOf(row)); // A..F
+
+        // Build justified circular seating lanes similar to real stadium maps.
+        // Outer lane: A/B, middle: C/D, inner: E/F
+        const lane = Math.floor(rowIndex / 2); // 0,1,2
+        const pairIndex = rowIndex % 2; // 0 or 1
+        const slot = seatNo * 2 + pairIndex; // 0..15
+        const laneRadius = [318, 278, 238];
+        const laneAngleOffset = [0, 6, 12];
+        const angleStart = -160;
+        const angleSpan = 320;
+        const step = angleSpan / 15;
         return {
-          angle: angleStart + seatNo * step + rowIndex * 1.8,
-          radius: 330 - rowIndex * 38
+          angle: angleStart + slot * step + laneAngleOffset[lane],
+          radius: laneRadius[lane]
         };
       }
 
