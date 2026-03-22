@@ -1,0 +1,896 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IPL Seat Selection</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: Inter, Arial, sans-serif;
+    }
+
+    body {
+      background: #f3f4f6;
+      color: #111827;
+      overflow: hidden;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 1.8fr 1fr;
+      height: 100vh;
+      width: 100%;
+    }
+
+    .left {
+      background: #f1f1f1;
+      border-right: 1px solid #ddd;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 16px 18px;
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+      flex-wrap: wrap;
+    }
+
+    .match-info h1 {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .match-info p {
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.4;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .controls select,
+    .controls button,
+    .controls input {
+      border: 1px solid #d1d5db;
+      background: #fff;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .controls button {
+      cursor: pointer;
+      font-weight: 700;
+      transition: 0.2s ease;
+    }
+
+    .controls button:hover {
+      background: #f9fafb;
+    }
+
+    .stadium-wrap {
+      position: relative;
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
+    }
+
+    .zoom-box {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .zoom-box button {
+      width: 46px;
+      height: 46px;
+      border: none;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+      font-size: 24px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .seat-stage {
+      min-width: 1100px;
+      min-height: 900px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .stadium {
+      position: relative;
+      width: 900px;
+      height: 900px;
+      transform-origin: center center;
+      transition: transform 0.25s ease;
+    }
+
+    .outer-ring {
+      position: absolute;
+      inset: 10px;
+      border-radius: 48% 52% 50% 50% / 42% 42% 58% 58%;
+      background: #ffffff;
+      border: 2px solid #e5e7eb;
+      box-shadow: inset 0 0 0 12px #f8fafc;
+    }
+
+    .field {
+      position: absolute;
+      width: 520px;
+      height: 520px;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: #4f8a37;
+      box-shadow: inset 0 0 0 12px #ffffff;
+      z-index: 1;
+    }
+
+    .pitch {
+      position: absolute;
+      width: 46px;
+      height: 98px;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background: #d98a2b;
+      border: 4px solid #bf751d;
+      border-radius: 12px;
+      z-index: 3;
+    }
+
+    .pitch::before,
+    .pitch::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 28px;
+      height: 4px;
+      background: rgba(255,255,255,0.55);
+      border-radius: 10px;
+    }
+
+    .pitch::before {
+      top: 18px;
+    }
+
+    .pitch::after {
+      bottom: 18px;
+    }
+
+    .blocks-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+    }
+
+    .seat-block {
+      position: absolute;
+      width: 92px;
+      height: 58px;
+      border-radius: 14px;
+      background: #b8d97d;
+      border: 3px solid #fff;
+      color: #395b24;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+      cursor: pointer;
+      transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+      user-select: none;
+      text-align: center;
+      padding: 4px;
+      font-size: 14px;
+    }
+
+    .seat-block:hover {
+      transform: scale(1.05);
+      background: #a7d067;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.08);
+    }
+
+    .seat-block.active {
+      background: #4caf50;
+      color: #fff;
+    }
+
+    .seat-block.low {
+      background: #efe39a;
+      color: #6a5512;
+    }
+
+    .seat-block.sold {
+      background: #d1d5db;
+      color: #6b7280;
+      cursor: not-allowed;
+    }
+
+    .seat-block.mini {
+      width: 70px;
+      height: 44px;
+      font-size: 12px;
+    }
+
+    .seat-block.tiny {
+      width: 56px;
+      height: 34px;
+      font-size: 11px;
+      border-radius: 10px;
+    }
+
+    .legend {
+      position: absolute;
+      left: 20px;
+      bottom: 20px;
+      z-index: 15;
+      background: rgba(255,255,255,0.96);
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      color: #374151;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legend-box {
+      width: 16px;
+      height: 16px;
+      border-radius: 5px;
+      border: 1px solid #d1d5db;
+    }
+
+    .available { background: #b8d97d; }
+    .few { background: #efe39a; }
+    .selected { background: #4caf50; }
+    .soldout { background: #d1d5db; }
+
+    .right {
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      height: 100vh;
+    }
+
+    .sidebar-top {
+      padding: 18px;
+      border-bottom: 1px solid #ececec;
+      background: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .sidebar-top h2 {
+      font-size: 26px;
+      margin-bottom: 10px;
+      font-weight: 800;
+    }
+
+    .sidebar-filters {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .sidebar-filters select {
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      background: #fff;
+    }
+
+    .listings {
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .ticket-card {
+      padding: 18px;
+      border-bottom: 1px solid #ececec;
+      transition: 0.2s ease;
+      cursor: pointer;
+    }
+
+    .ticket-card:hover {
+      background: #fafafa;
+    }
+
+    .ticket-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      align-items: flex-start;
+    }
+
+    .ticket-title {
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .ticket-price-wrap {
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .ticket-price {
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .ticket-row {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .ticket-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      color: #6b7280;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .ticket-bottom {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .remaining {
+      color: #e91e63;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .badge {
+      background: #10b981;
+      color: #fff;
+      font-size: 13px;
+      padding: 5px 9px;
+      border-radius: 9px;
+      font-weight: 800;
+      display: inline-block;
+    }
+
+    .empty-state {
+      padding: 30px 20px;
+      color: #6b7280;
+      font-size: 15px;
+    }
+
+    .book-btn {
+      margin-top: 12px;
+      display: inline-block;
+      border: none;
+      background: #111827;
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .book-btn:hover {
+      background: #000;
+    }
+
+    .mobile-note {
+      display: none;
+      padding: 10px 16px;
+      background: #111827;
+      color: #fff;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 1100px) {
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+
+      .right {
+        height: auto;
+        min-height: 500px;
+      }
+
+      .left {
+        min-height: 100vh;
+      }
+
+      .mobile-note {
+        display: block;
+      }
+
+      .seat-stage {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .controls {
+        width: 100%;
+      }
+
+      .controls select,
+      .controls input {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="mobile-note">On mobile, scroll sideways inside the stadium area for full seat map.</div>
+
+  <div class="app">
+    <section class="left">
+      <div class="topbar">
+        <div class="match-info">
+          <h1 id="matchTitle">Loading match...</h1>
+          <p id="matchMeta">Please wait...</p>
+        </div>
+
+        <div class="controls">
+          <select id="matchSelector"></select>
+          <input type="number" id="ticketCount" min="1" max="10" value="2" placeholder="Tickets" />
+          <button id="resetBtn">Reset</button>
+        </div>
+      </div>
+
+      <div class="stadium-wrap">
+        <div class="zoom-box">
+          <button id="zoomIn">+</button>
+          <button id="zoomOut">-</button>
+        </div>
+
+        <div class="seat-stage">
+          <div class="stadium" id="stadium">
+            <div class="outer-ring"></div>
+            <div class="field"></div>
+            <div class="pitch"></div>
+            <div class="blocks-layer" id="blocksLayer"></div>
+
+            <div class="legend">
+              <div class="legend-item"><span class="legend-box available"></span> Available</div>
+              <div class="legend-item"><span class="legend-box few"></span> Few left</div>
+              <div class="legend-item"><span class="legend-box selected"></span> Selected</div>
+              <div class="legend-item"><span class="legend-box soldout"></span> Sold out</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right">
+      <div class="sidebar-top">
+        <h2 id="listingCount">0 listings</h2>
+        <div class="sidebar-filters">
+          <select id="sortSelect">
+            <option value="default">Sort: Default</option>
+            <option value="priceLow">Price: Low to High</option>
+            <option value="priceHigh">Price: High to Low</option>
+            <option value="ratingHigh">Best Rating</option>
+          </select>
+
+          <select id="availabilityFilter">
+            <option value="all">All availability</option>
+            <option value="available">Available only</option>
+            <option value="few">Few seats left</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="listings" id="listings"></div>
+    </aside>
+  </div>
+
+  <script>
+    const matches = {
+      "mi-vs-csk-2026-03-29": {
+        title: "Mumbai Indians vs Chennai Super Kings",
+        stadium: "Wankhede Stadium, Mumbai, Maharashtra, India",
+        date: "2026-03-29 07:30 PM",
+        currency: "INR",
+        seatBlocks: [
+          { id: "A", name: "Sunil Gavaskar Pavilion A", x: 95,  y: 245, price: 4277, available: 8, size: "normal" },
+          { id: "B", name: "Sunil Gavaskar Pavilion B", x: 145, y: 175, price: 4380, available: 3, size: "normal" },
+          { id: "C", name: "Sachin Tendulkar Pavilion C", x: 225, y: 120, price: 4728, available: 6, size: "normal" },
+          { id: "D", name: "Sachin Tendulkar Pavilion D", x: 320, y: 90,  price: 4803, available: 2, size: "normal" },
+          { id: "E", name: "Dilip Vengsarkar Stand E", x: 420, y: 78,  price: 4428, available: 5, size: "normal" },
+          { id: "F", name: "Sunil Gavaskar Pavilion F", x: 520, y: 82,  price: 4277, available: 10, size: "normal" },
+          { id: "G", name: "Sunil Gavaskar Pavilion G", x: 620, y: 95,  price: 4728, available: 4, size: "normal" },
+          { id: "H", name: "Grandstand H",             x: 710, y: 135, price: 3300, available: 11, size: "normal" },
+          { id: "I", name: "Grandstand I",             x: 770, y: 200, price: 3200, available: 7, size: "normal" },
+          { id: "J", name: "Block J",                  x: 790, y: 295, price: 3100, available: 6, size: "mini" },
+          { id: "K", name: "Block K",                  x: 795, y: 365, price: 3150, available: 0, size: "mini" },
+          { id: "L", name: "Block L",                  x: 775, y: 435, price: 3250, available: 3, size: "mini" },
+          { id: "M", name: "Block M",                  x: 735, y: 505, price: 3350, available: 7, size: "mini" },
+          { id: "N", name: "Block N",                  x: 680, y: 575, price: 3450, available: 4, size: "mini" },
+          { id: "O", name: "Block O",                  x: 610, y: 635, price: 3550, available: 12, size: "mini" },
+          { id: "P", name: "Block P",                  x: 530, y: 685, price: 3650, available: 2, size: "mini" },
+          { id: "Q", name: "Block Q",                  x: 440, y: 715, price: 3750, available: 6, size: "mini" },
+          { id: "R", name: "Block R",                  x: 345, y: 710, price: 3650, available: 8, size: "mini" },
+          { id: "S", name: "Block S",                  x: 255, y: 680, price: 3500, available: 5, size: "mini" },
+          { id: "T", name: "Block T",                  x: 175, y: 625, price: 3400, available: 0, size: "mini" },
+          { id: "U", name: "Block U",                  x: 120, y: 555, price: 3300, available: 9, size: "mini" },
+          { id: "V", name: "Block V",                  x: 92,  y: 470, price: 3200, available: 6, size: "mini" },
+          { id: "W", name: "Block W",                  x: 82,  y: 390, price: 3150, available: 2, size: "mini" },
+          { id: "X", name: "Block X",                  x: 85,  y: 320, price: 3100, available: 4, size: "mini" },
+
+          { id: "Y1", name: "Platinum Lounge 1",       x: 250, y: 210, price: 6500, available: 2, size: "tiny" },
+          { id: "Y2", name: "Platinum Lounge 2",       x: 300, y: 175, price: 6500, available: 1, size: "tiny" },
+          { id: "Y3", name: "Platinum Lounge 3",       x: 600, y: 175, price: 6500, available: 2, size: "tiny" },
+          { id: "Y4", name: "Platinum Lounge 4",       x: 650, y: 210, price: 6500, available: 0, size: "tiny" },
+
+          { id: "GS1", name: "Grandstand 1",           x: 405, y: 795, price: 2800, available: 22, size: "tiny" },
+          { id: "GS2", name: "Grandstand 2",           x: 465, y: 795, price: 2800, available: 18, size: "tiny" },
+          { id: "GS3", name: "Grandstand 3",           x: 525, y: 795, price: 2800, available: 9, size: "tiny" },
+          { id: "GS4", name: "Grandstand 4",           x: 585, y: 795, price: 2800, available: 4, size: "tiny" }
+        ],
+        listings: [
+          { section: "Sunil Gavaskar Pavilion A", row: "L3", price: 4277, ticketsTogether: 2, rating: 9.9, view: "Clear view", remaining: 2 },
+          { section: "Dilip Vengsarkar Stand E", row: "L3", price: 4428, ticketsTogether: 2, rating: 8.6, view: "Clear view", remaining: 2 },
+          { section: "Sachin Tendulkar Pavilion C", row: "L3", price: 4728, ticketsTogether: 2, rating: 8.4, view: "Great view", remaining: 2 },
+          { section: "Sachin Tendulkar Pavilion D", row: "L3", price: 4803, ticketsTogether: 2, rating: 8.2, view: "Great view", remaining: 2 },
+          { section: "Sunil Gavaskar Pavilion F", row: "L2", price: 4277, ticketsTogether: 4, rating: 8.9, view: "Amazing", remaining: 4 },
+          { section: "Grandstand H", row: "L1", price: 3300, ticketsTogether: 4, rating: 8.1, view: "Side clear view", remaining: 4 },
+          { section: "Platinum Lounge 1", row: "Premium", price: 6500, ticketsTogether: 2, rating: 9.8, view: "VIP view", remaining: 2 },
+          { section: "Grandstand 1", row: "A1", price: 2800, ticketsTogether: 6, rating: 7.8, view: "Budget view", remaining: 6 }
+        ]
+      },
+
+      "rcb-vs-kkr-2026-04-02": {
+        title: "Royal Challengers Bengaluru vs Kolkata Knight Riders",
+        stadium: "M. Chinnaswamy Stadium, Bengaluru, Karnataka, India",
+        date: "2026-04-02 07:30 PM",
+        currency: "INR",
+        seatBlocks: [
+          { id: "A", name: "Pavilion A", x: 110, y: 250, price: 3900, available: 10, size: "normal" },
+          { id: "B", name: "Pavilion B", x: 170, y: 175, price: 4100, available: 3, size: "normal" },
+          { id: "C", name: "Pavilion C", x: 255, y: 120, price: 4300, available: 7, size: "normal" },
+          { id: "D", name: "Pavilion D", x: 355, y: 90,  price: 4500, available: 2, size: "normal" },
+          { id: "E", name: "Pavilion E", x: 455, y: 82,  price: 4600, available: 0, size: "normal" },
+          { id: "F", name: "Pavilion F", x: 555, y: 90,  price: 4400, available: 6, size: "normal" },
+          { id: "G", name: "Pavilion G", x: 650, y: 110, price: 4300, available: 5, size: "normal" },
+          { id: "H", name: "Pavilion H", x: 730, y: 160, price: 4100, available: 12, size: "normal" },
+          { id: "I", name: "Stand I",    x: 785, y: 235, price: 3200, available: 9, size: "mini" },
+          { id: "J", name: "Stand J",    x: 805, y: 315, price: 3100, available: 7, size: "mini" },
+          { id: "K", name: "Stand K",    x: 800, y: 395, price: 3000, available: 2, size: "mini" },
+          { id: "L", name: "Stand L",    x: 770, y: 470, price: 2950, available: 3, size: "mini" },
+          { id: "M", name: "Stand M",    x: 710, y: 545, price: 3050, available: 11, size: "mini" },
+          { id: "N", name: "Stand N",    x: 640, y: 615, price: 3200, available: 0, size: "mini" },
+          { id: "O", name: "Stand O",    x: 555, y: 680, price: 3300, available: 4, size: "mini" },
+          { id: "P", name: "Stand P",    x: 460, y: 715, price: 3400, available: 6, size: "mini" },
+          { id: "Q", name: "Stand Q",    x: 360, y: 710, price: 3300, available: 8, size: "mini" },
+          { id: "R", name: "Stand R",    x: 270, y: 680, price: 3200, available: 5, size: "mini" },
+          { id: "S", name: "Stand S",    x: 190, y: 620, price: 3100, available: 4, size: "mini" },
+          { id: "T", name: "Stand T",    x: 125, y: 545, price: 3000, available: 1, size: "mini" }
+        ],
+        listings: [
+          { section: "Pavilion A", row: "L2", price: 3900, ticketsTogether: 2, rating: 9.1, view: "Clear view", remaining: 2 },
+          { section: "Pavilion C", row: "L3", price: 4300, ticketsTogether: 2, rating: 8.9, view: "Great view", remaining: 2 },
+          { section: "Pavilion H", row: "L1", price: 4100, ticketsTogether: 4, rating: 8.8, view: "Amazing", remaining: 4 },
+          { section: "Stand K", row: "B2", price: 3000, ticketsTogether: 2, rating: 8.0, view: "Good view", remaining: 2 },
+          { section: "Stand T", row: "B1", price: 3000, ticketsTogether: 1, rating: 7.9, view: "Limited seats", remaining: 1 }
+        ]
+      },
+
+      "gt-vs-srh-2026-04-05": {
+        title: "Gujarat Titans vs Sunrisers Hyderabad",
+        stadium: "Narendra Modi Stadium, Ahmedabad, Gujarat, India",
+        date: "2026-04-05 07:30 PM",
+        currency: "INR",
+        seatBlocks: [
+          { id: "A", name: "North Pavilion A", x: 110, y: 240, price: 3500, available: 16, size: "normal" },
+          { id: "B", name: "North Pavilion B", x: 180, y: 170, price: 3650, available: 8, size: "normal" },
+          { id: "C", name: "North Pavilion C", x: 275, y: 120, price: 3850, available: 3, size: "normal" },
+          { id: "D", name: "North Pavilion D", x: 380, y: 92,  price: 4050, available: 0, size: "normal" },
+          { id: "E", name: "North Pavilion E", x: 490, y: 88,  price: 4200, available: 5, size: "normal" },
+          { id: "F", name: "North Pavilion F", x: 595, y: 102, price: 4300, available: 2, size: "normal" },
+          { id: "G", name: "North Pavilion G", x: 690, y: 145, price: 4100, available: 10, size: "normal" },
+          { id: "H", name: "North Pavilion H", x: 760, y: 215, price: 3950, available: 7, size: "normal" },
+          { id: "I", name: "East Stand I", x: 800, y: 305, price: 2900, available: 9, size: "mini" },
+          { id: "J", name: "East Stand J", x: 805, y: 385, price: 2950, available: 6, size: "mini" },
+          { id: "K", name: "East Stand K", x: 780, y: 465, price: 3000, available: 4, size: "mini" },
+          { id: "L", name: "East Stand L", x: 730, y: 540, price: 3050, available: 2, size: "mini" },
+          { id: "M", name: "South Stand M", x: 655, y: 620, price: 3100, available: 8, size: "mini" },
+          { id: "N", name: "South Stand N", x: 565, y: 685, price: 3150, available: 12, size: "mini" },
+          { id: "O", name: "South Stand O", x: 465, y: 720, price: 3200, available: 10, size: "mini" },
+          { id: "P", name: "South Stand P", x: 360, y: 718, price: 3150, available: 3, size: "mini" },
+          { id: "Q", name: "South Stand Q", x: 265, y: 688, price: 3050, available: 4, size: "mini" },
+          { id: "R", name: "West Stand R", x: 180, y: 632, price: 3000, available: 2, size: "mini" },
+          { id: "S", name: "West Stand S", x: 122, y: 555, price: 2950, available: 1, size: "mini" },
+          { id: "T", name: "West Stand T", x: 95,  y: 470, price: 2900, available: 11, size: "mini" }
+        ],
+        listings: [
+          { section: "North Pavilion A", row: "P1", price: 3500, ticketsTogether: 4, rating: 9.0, view: "Clear view", remaining: 4 },
+          { section: "North Pavilion C", row: "P2", price: 3850, ticketsTogether: 2, rating: 8.7, view: "Good angle", remaining: 2 },
+          { section: "North Pavilion F", row: "P3", price: 4300, ticketsTogether: 2, rating: 9.3, view: "Premium", remaining: 2 },
+          { section: "South Stand O", row: "S2", price: 3200, ticketsTogether: 6, rating: 8.4, view: "Popular choice", remaining: 6 },
+          { section: "West Stand S", row: "W1", price: 2950, ticketsTogether: 1, rating: 7.7, view: "Last seat", remaining: 1 }
+        ]
+      }
+    };
+
+    const matchSelector = document.getElementById("matchSelector");
+    const matchTitle = document.getElementById("matchTitle");
+    const matchMeta = document.getElementById("matchMeta");
+    const blocksLayer = document.getElementById("blocksLayer");
+    const listingsEl = document.getElementById("listings");
+    const listingCount = document.getElementById("listingCount");
+    const sortSelect = document.getElementById("sortSelect");
+    const availabilityFilter = document.getElementById("availabilityFilter");
+    const ticketCountInput = document.getElementById("ticketCount");
+    const stadium = document.getElementById("stadium");
+
+    let zoom = 1;
+    let selectedMatchKey = Object.keys(matches)[0];
+    let selectedBlock = null;
+
+    function fillMatchSelector() {
+      matchSelector.innerHTML = "";
+      Object.keys(matches).forEach(key => {
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = matches[key].title;
+        matchSelector.appendChild(option);
+      });
+      matchSelector.value = selectedMatchKey;
+    }
+
+    function getCurrentMatch() {
+      return matches[selectedMatchKey];
+    }
+
+    function formatCurrency(currency, value) {
+      return `${currency}${Number(value).toLocaleString()}`;
+    }
+
+    function updateHeader() {
+      const match = getCurrentMatch();
+      matchTitle.textContent = match.title;
+      matchMeta.textContent = `${match.date} | ${match.stadium}`;
+    }
+
+    function renderBlocks() {
+      const match = getCurrentMatch();
+      blocksLayer.innerHTML = "";
+
+      match.seatBlocks.forEach(block => {
+        const el = document.createElement("div");
+        el.className = "seat-block";
+        el.style.left = block.x + "px";
+        el.style.top = block.y + "px";
+
+        if (block.size === "mini") el.classList.add("mini");
+        if (block.size === "tiny") el.classList.add("tiny");
+        if (block.available === 0) el.classList.add("sold");
+        else if (block.available <= 3) el.classList.add("low");
+
+        if (selectedBlock && selectedBlock.id === block.id) {
+          el.classList.add("active");
+        }
+
+        el.textContent = block.id;
+        el.title = `${block.name} | ${formatCurrency(match.currency, block.price)} | ${block.available} seats`;
+
+        el.addEventListener("click", () => {
+          if (block.available === 0) return;
+          selectedBlock = block;
+          renderBlocks();
+          renderListings();
+        });
+
+        blocksLayer.appendChild(el);
+      });
+    }
+
+    function getFilteredListings() {
+      const match = getCurrentMatch();
+      let listings = [...match.listings];
+      const requiredTickets = parseInt(ticketCountInput.value || "1", 10);
+
+      if (selectedBlock) {
+        listings = listings.filter(item =>
+          item.section === selectedBlock.name ||
+          item.section.toLowerCase().includes(selectedBlock.id.toLowerCase())
+        );
+
+        if (!listings.length) {
+          listings = [{
+            section: selectedBlock.name,
+            row: "Best Available",
+            price: selectedBlock.price,
+            ticketsTogether: Math.min(selectedBlock.available, 6),
+            rating: 8.8,
+            view: "Standard clear view",
+            remaining: selectedBlock.available
+          }];
+        }
+      }
+
+      listings = listings.filter(item => item.ticketsTogether >= requiredTickets);
+
+      const filterValue = availabilityFilter.value;
+      if (filterValue === "available") {
+        listings = listings.filter(item => item.remaining > 3);
+      } else if (filterValue === "few") {
+        listings = listings.filter(item => item.remaining > 0 && item.remaining <= 3);
+      }
+
+      const sortValue = sortSelect.value;
+      if (sortValue === "priceLow") {
+        listings.sort((a, b) => a.price - b.price);
+      } else if (sortValue === "priceHigh") {
+        listings.sort((a, b) => b.price - a.price);
+      } else if (sortValue === "ratingHigh") {
+        listings.sort((a, b) => b.rating - a.rating);
+      }
+
+      return listings;
+    }
+
+    function renderListings() {
+      const match = getCurrentMatch();
+      const listings = getFilteredListings();
+
+      listingCount.textContent = `${listings.length} listings`;
+      listingsEl.innerHTML = "";
+
+      if (!listings.length) {
+        listingsEl.innerHTML = `<div class="empty-state">No listings found for this filter or ticket count.</div>`;
+        return;
+      }
+
+      listings.forEach(item => {
+        const card = document.createElement("div");
+        card.className = "ticket-card";
+
+        card.innerHTML = `
+          <div class="ticket-head">
+            <div class="ticket-title">${item.section}</div>
+            <div class="ticket-price-wrap">
+              <div class="ticket-price">${formatCurrency(match.currency, item.price)}</div>
+              <span class="badge">${item.rating}</span>
+            </div>
+          </div>
+          <div class="ticket-row">Row ${item.row}</div>
+          <div class="ticket-meta">
+            <span>${item.ticketsTogether} tickets together</span>
+            <span>${item.view}</span>
+          </div>
+          <div class="ticket-bottom">
+            <div class="remaining">${item.remaining} tickets remaining in this listing</div>
+            <button class="book-btn">Book Now</button>
+          </div>
+        `;
+
+        const btn = card.querySelector(".book-btn");
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          alert(`Booked: ${item.section}\nRow: ${item.row}\nPrice: ${formatCurrency(match.currency, item.price)}`);
+        });
+
+        card.addEventListener("click", () => {
+          const block = match.seatBlocks.find(b => b.name === item.section);
+          if (block && block.available > 0) {
+            selectedBlock = block;
+            renderBlocks();
+          }
+        });
+
+        listingsEl.appendChild(card);
+      });
+    }
+
+    function renderAll() {
+      updateHeader();
+      renderBlocks();
+      renderListings();
+    }
+
+    document.getElementById("zoomIn").addEventListener("click", () => {
+      zoom += 0.1;
+      stadium.style.transform = `scale(${zoom})`;
+    });
+
+    document.getElementById("zoomOut").addEventListener("click", () => {
+      zoom = Math.max(0.6, zoom - 0.1);
+      stadium.style.transform = `scale(${zoom})`;
+    });
+
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      selectedBlock = null;
+      sortSelect.value = "default";
+      availabilityFilter.value = "all";
+      ticketCountInput.value = 2;
+      zoom = 1;
+      stadium.style.transform = "scale(1)";
+      renderAll();
+    });
+
+    matchSelector.addEventListener("change", () => {
+      selectedMatchKey = matchSelector.value;
+      selectedBlock = null;
+      zoom = 1;
+      stadium.style.transform = "scale(1)";
+      renderAll();
+    });
+
+    sortSelect.addEventListener("change", renderListings);
+    availabilityFilter.addEventListener("change", renderListings);
+    ticketCountInput.addEventListener("input", renderListings);
+
+    const queryMatch = new URLSearchParams(window.location.search).get("match");
+    if (queryMatch) {
+      const normalized = queryMatch.trim().toLowerCase();
+      const matchedKey = Object.keys(matches).find((key) => {
+        const title = matches[key].title.toLowerCase();
+        return title === normalized || title.includes(normalized) || normalized.includes(title);
+      });
+
+      if (matchedKey) {
+        selectedMatchKey = matchedKey;
+      }
+    }
+
+    fillMatchSelector();
+    renderAll();
+  </script>
+</body>
+</html>
