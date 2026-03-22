@@ -526,19 +526,20 @@
       transform-origin: center center;
       text-align: center;
       padding: 4px 5px;
-      width: 72px;
-      height: 52px;
+      width: 78px;
+      height: 54px;
     }
 
     .stadium-seat.grandstand {
-      width: 66px;
-      height: 44px;
+      width: 72px;
+      height: 46px;
     }
 
     .stadium-seat .seat-id {
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 900;
-      line-height: 0.9;
+      line-height: 1;
+      letter-spacing: 0.2px;
     }
 
     .stadium-seat .seat-content {
@@ -573,8 +574,8 @@
 
     .price-tag {
       position: absolute;
-      min-width: 114px;
-      padding: 8px 10px 7px;
+      min-width: 104px;
+      padding: 7px 9px 6px;
       border-radius: 12px;
       border: 1px solid #e3e6ed;
       background: #ffffff;
@@ -586,7 +587,7 @@
 
     .price-tag strong {
       display: block;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 900;
       color: #0f172a;
       line-height: 1.05;
@@ -594,11 +595,18 @@
 
     .price-tag span {
       display: block;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 800;
       color: #f43388;
       line-height: 1.05;
       margin-top: 2px;
+    }
+
+    .stadium-hint {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #566176;
+      line-height: 1.45;
     }
 
     .price-tag.selected {
@@ -888,6 +896,7 @@
                 <div class="price-badges" id="priceBadges"></div>
               </div>
             </div>
+            <p class="stadium-hint">Hover any section to see price. Click to select. Selected sections stay highlighted and appear in checkout with exact seat IDs.</p>
           </div>
 
           <div class="checkout-box">
@@ -1107,6 +1116,7 @@
     let currentEvent = null;
     let selectedSeats = [];
     let seatData = [];
+    let hoveredSeatId = null;
     let stadiumZoom = 1;
     let viagogoPrices = [];
     let viagogoPriceFetchedAt = 0;
@@ -1557,6 +1567,7 @@
         const bx = centerX + badgeRadius * Math.cos(rad);
         const by = centerY + badgeRadius * Math.sin(rad);
         const isSelected = selectedSeats.includes(seat.id);
+        const isHovered = hoveredSeatId === seat.id;
         const leftCount = seat.booked ? 0 : 1 + (stableHash(`${seat.id}:${currentEvent?.id || "match"}:left`) % 10);
 
         let classes = "stadium-seat ";
@@ -1576,16 +1587,18 @@
             type="button"
             class="${classes}"
             onclick="toggleSeat('${seat.id}')"
+            onmouseenter="setHoverSeat('${seat.id}')"
+            onmouseleave="clearHoverSeat()"
             style="left:${x}px; top:${y}px; transform: translate(-50%, -50%) rotate(${angle + 90}deg);"
             title="${seat.id} - ${formatInrCompact(seat.price)}"
           >
             <span class="seat-content" style="transform: rotate(${-(angle + 90)}deg);">
-              <span class="seat-id">${seat.id.replace(/[0-9]/g, "")}</span>
+              <span class="seat-id">${seat.id}</span>
             </span>
           </button>
         `);
 
-        if (!seat.booked) {
+        if (!seat.booked && (isSelected || isHovered)) {
           badgeMarkup.push(`
             <div class="price-tag ${isSelected ? "selected" : ""}" style="left:${bx}px; top:${by}px;">
               <strong>${formatInrCompact(seat.price)}</strong>
@@ -1635,6 +1648,7 @@
       }
 
       selectedSeats = [];
+      hoveredSeatId = null;
       generateSeats();
       stadiumZoom = 1;
       stadiumMap.style.transform = "scale(1)";
@@ -1664,6 +1678,22 @@
 
       renderSeats();
       updateSummary();
+    }
+
+    function setHoverSeat(seatId) {
+      if (hoveredSeatId === seatId) {
+        return;
+      }
+      hoveredSeatId = seatId;
+      renderSeats();
+    }
+
+    function clearHoverSeat() {
+      if (!hoveredSeatId) {
+        return;
+      }
+      hoveredSeatId = null;
+      renderSeats();
     }
 
     payNowBtn.addEventListener("click", () => {
@@ -1810,6 +1840,8 @@
 
     window.openBooking = openBooking;
     window.toggleSeat = toggleSeat;
+    window.setHoverSeat = setHoverSeat;
+    window.clearHoverSeat = clearHoverSeat;
   </script>
 </body>
 </html>
