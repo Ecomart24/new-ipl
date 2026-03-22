@@ -422,7 +422,7 @@ async function runCheckout() {
       key: order.razorpay.keyId || state.config.razorpayKeyId,
       amount: order.razorpay.amount,
       currency: order.razorpay.currency,
-      name: "Boundary Pass",
+      name: "Viagoco",
       description: `${order.match.homeTeam} vs ${order.match.awayTeam} | ${order.section.label}`,
       order_id: order.razorpay.orderId,
       prefill: {

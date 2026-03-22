@@ -1,4 +1,4 @@
-# Boundary Pass IPL Tickets
+# Viagoco IPL Tickets
 
 IPL ticket marketplace built with HTML/CSS/JS frontend + Node/Express backend.
 
