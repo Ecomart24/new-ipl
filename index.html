@@ -687,7 +687,6 @@
       <div class="live-dashboard">
         <div class="dash-chip"><strong id="upcomingCount">0</strong>upcoming</div>
         <div class="dash-chip live"><strong id="liveCount">0</strong>live</div>
-        <div class="dash-chip"><strong id="completedCount">0</strong>completed</div>
         <button class="dash-refresh" id="refreshMatchesBtn" type="button">Refresh now</button>
         <span class="dash-updated" id="lastUpdatedText">Not updated yet</span>
       </div>
@@ -898,7 +897,6 @@
     const apiStatusBar = document.getElementById("apiStatusBar");
     const upcomingCount = document.getElementById("upcomingCount");
     const liveCount = document.getElementById("liveCount");
-    const completedCount = document.getElementById("completedCount");
     const refreshMatchesBtn = document.getElementById("refreshMatchesBtn");
     const lastUpdatedText = document.getElementById("lastUpdatedText");
 
@@ -1075,19 +1073,16 @@
         (acc, event) => {
           if (event.statusType === "live") {
             acc.live += 1;
-          } else if (event.statusType === "completed") {
-            acc.completed += 1;
           } else {
             acc.upcoming += 1;
           }
           return acc;
         },
-        { upcoming: 0, live: 0, completed: 0 }
+        { upcoming: 0, live: 0 }
       );
 
       upcomingCount.textContent = counts.upcoming;
       liveCount.textContent = counts.live;
-      completedCount.textContent = counts.completed;
     }
 
     function getFeaturedMatch() {
@@ -1107,9 +1102,7 @@
         return upcoming;
       }
 
-      return allEvents
-        .filter((event) => event.statusType === "completed")
-        .sort((a, b) => b.sortTime - a.sortTime)[0] || allEvents[0] || null;
+      return allEvents[0] || null;
     }
 
     function renderFeaturedMatch() {
@@ -1383,14 +1376,15 @@
         const mappedEvents = merged
           .filter((apiEvent) => apiEvent.strSport === "Cricket" && String(apiEvent.idLeague) === IPL_LEAGUE_ID)
           .map((apiEvent) => mapApiEvent(apiEvent))
+          .filter((event) => event.statusType !== "completed")
           .sort((a, b) => a.sortTime - b.sortTime);
 
         if (mappedEvents.length === 0) {
-          throw new Error("API returned no IPL matches");
+          throw new Error("API returned no upcoming or running IPL matches");
         }
 
         allEvents = mappedEvents;
-        updateApiStatus("Live IPL data connected. Upcoming, running, and completed matches update automatically.");
+        updateApiStatus("Live IPL data connected. Showing upcoming and running matches only.");
         updateLastUpdated();
       } catch (error) {
         allEvents = [...fallbackEvents];
