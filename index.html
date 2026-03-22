@@ -501,10 +501,16 @@
     }
 
     .seat-ring,
+    .numbering-layer,
     .price-badges {
       position: absolute;
       inset: 0;
       z-index: 10;
+    }
+
+    .numbering-layer {
+      z-index: 12;
+      pointer-events: none;
     }
 
     .price-badges {
@@ -514,7 +520,8 @@
     .stadium-seat {
       position: absolute;
       border: 2px solid #ffffff;
-      border-radius: 12px;
+      border-radius: 10px;
+      clip-path: polygon(8% 4%, 92% 0%, 100% 96%, 0% 100%);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -526,12 +533,12 @@
       transform-origin: center center;
       text-align: center;
       padding: 4px 5px;
-      width: 84px;
-      height: 56px;
+      width: 78px;
+      height: 52px;
     }
 
     .stadium-seat.grandstand {
-      width: 76px;
+      width: 74px;
       height: 46px;
     }
 
@@ -600,6 +607,23 @@
       color: #f43388;
       line-height: 1.05;
       margin-top: 2px;
+    }
+
+    .number-tile {
+      position: absolute;
+      width: 22px;
+      height: 16px;
+      border-radius: 3px;
+      background: #d7dbe0;
+      color: #9aa2ac;
+      border: 1px solid #c6ccd4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 800;
+      transform: translate(-50%, -50%);
+      line-height: 1;
     }
 
     .stadium-hint {
@@ -765,6 +789,12 @@
         height: 36px;
       }
 
+      .number-tile {
+        width: 18px;
+        height: 14px;
+        font-size: 8px;
+      }
+
       .price-tag {
         min-width: 92px;
         padding: 6px 8px;
@@ -893,6 +923,7 @@
                 <div class="field"></div>
                 <div class="pitch"></div>
                 <div class="seat-ring" id="seatRing"></div>
+                <div class="numbering-layer" id="numberingLayer"></div>
                 <div class="price-badges" id="priceBadges"></div>
               </div>
             </div>
@@ -1094,6 +1125,7 @@
     const bookingTitle = document.getElementById("bookingTitle");
     const bookingMeta = document.getElementById("bookingMeta");
     const seatRing = document.getElementById("seatRing");
+    const numberingLayer = document.getElementById("numberingLayer");
     const priceBadges = document.getElementById("priceBadges");
     const stadiumMap = document.getElementById("stadiumMap");
     const zoomInBtn = document.getElementById("zoomInBtn");
@@ -1530,39 +1562,34 @@
       const centerY = 380;
       const rows = ["A", "B", "C", "D", "E", "F"];
       const seatMarkup = [];
+      const numberMarkup = [];
       const badgeMarkup = [];
 
       function getSeatLayout(seat) {
         if (seat.grandstand) {
           const index = clamp(Number.parseInt(seat.id.replace("GS", ""), 10) - 1, 0, 11);
           const start = 206;
-          const span = 128;
+          const span = 126;
           const step = span / 11;
           const angle = start + index * step;
-          const wobble = index % 2 === 0 ? 4 : -4;
+          const wobble = index % 2 === 0 ? 3 : -3;
           return {
             angle,
-            radius: 334 + wobble
+            radius: 392 + wobble
           };
         }
 
         const row = seat.id.charAt(0);
         const seatNo = clamp(Number.parseInt(seat.id.slice(1), 10) - 1, 0, 7);
-        const rowIndex = Math.max(0, rows.indexOf(row)); // A..F
-
-        // Build justified circular seating lanes similar to real stadium maps.
-        // Outer lane: A/B, middle: C/D, inner: E/F
-        const lane = Math.floor(rowIndex / 2); // 0,1,2
-        const pairIndex = rowIndex % 2; // 0 or 1
-        const slot = seatNo * 2 + pairIndex; // 0..15
-        const laneRadius = [318, 278, 238];
-        const laneAngleOffset = [0, 6, 12];
-        const angleStart = -160;
-        const angleSpan = 320;
-        const step = angleSpan / 15;
+        const rowIndex = Math.max(0, rows.indexOf(row));
+        const angleStart = -150;
+        const angleSpan = 300;
+        const step = angleSpan / 7;
+        const rowRadii = [382, 368, 354, 340, 326, 312];
+        const rowOffsets = [0, 0.8, 1.6, 2.4, 3.2, 4];
         return {
-          angle: angleStart + slot * step + laneAngleOffset[lane],
-          radius: laneRadius[lane]
+          angle: angleStart + seatNo * step + rowOffsets[rowIndex],
+          radius: rowRadii[rowIndex]
         };
       }
 
@@ -1571,12 +1598,15 @@
         const rad = (angle * Math.PI) / 180;
         const x = centerX + radius * Math.cos(rad);
         const y = centerY + radius * Math.sin(rad);
-        const badgeRadius = radius + (seat.grandstand ? 58 : 52);
+        const rowCode = seat.grandstand ? "GS" : seat.id.charAt(0);
+        const badgeRadius = radius + (seat.grandstand ? 44 : 40);
         const bx = centerX + badgeRadius * Math.cos(rad);
         const by = centerY + badgeRadius * Math.sin(rad);
         const isSelected = selectedSeats.includes(seat.id);
         const isHovered = hoveredSeatId === seat.id;
         const leftCount = seat.booked ? 0 : 1 + (stableHash(`${seat.id}:${currentEvent?.id || "match"}:left`) % 10);
+        const showPersistentBadge =
+          seat.grandstand || rowCode === "A" || rowCode === "C" || rowCode === "E";
 
         let classes = "stadium-seat ";
         if (seat.grandstand) {
@@ -1606,7 +1636,7 @@
           </button>
         `);
 
-        if (!seat.booked && (isSelected || isHovered)) {
+        if (!seat.booked && (showPersistentBadge || isSelected || isHovered)) {
           badgeMarkup.push(`
             <div class="price-tag ${isSelected ? "selected" : ""}" style="left:${bx}px; top:${by}px;">
               <strong>${formatInrCompact(seat.price)}</strong>
@@ -1616,7 +1646,34 @@
         }
       });
 
+      let tile = 1;
+      for (let i = 0; i < 29; i += 1) {
+        const angle = -155 + (i * 270) / 28;
+        const radius = 342;
+        const rad = (angle * Math.PI) / 180;
+        const x = centerX + radius * Math.cos(rad);
+        const y = centerY + radius * Math.sin(rad);
+        numberMarkup.push(`<div class="number-tile" style="left:${x}px; top:${y}px;">${tile}</div>`);
+        tile += 1;
+      }
+
+      let tile2 = 30;
+      const gridStartX = 572;
+      const gridStartY = 640;
+      const gapX = 24;
+      const gapY = 22;
+      for (let r = 0; r < 4; r += 1) {
+        for (let c = 0; c < 7; c += 1) {
+          if (tile2 > 57) break;
+          const x = gridStartX + c * gapX;
+          const y = gridStartY + r * gapY;
+          numberMarkup.push(`<div class="number-tile" style="left:${x}px; top:${y}px;">${tile2}</div>`);
+          tile2 += 1;
+        }
+      }
+
       seatRing.innerHTML = seatMarkup.join("");
+      numberingLayer.innerHTML = numberMarkup.join("");
       priceBadges.innerHTML = badgeMarkup.join("");
     }
 
