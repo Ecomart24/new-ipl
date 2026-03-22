@@ -394,15 +394,19 @@
     }
 
     .available-box {
-      background: #9de7bc;
+      background: #b7dc84;
     }
 
     .selected-box {
-      background: #7fb7f4;
+      background: #0f172a;
     }
 
     .booked-box {
-      background: #efb8bb;
+      background: #c0c8d3;
+    }
+
+    .limited-box {
+      background: #e7cdd1;
     }
 
     .screen {
@@ -449,185 +453,179 @@
       color: #0f172a;
     }
 
-    .stadium-map {
-      width: 100%;
-      max-width: 860px;
-      height: 780px;
-      margin: 0 auto;
-      position: relative;
-      transform-origin: center center;
-      transition: transform 0.22s ease;
+    .zoom-reset-btn {
+      font-size: 18px;
+      font-weight: 800;
     }
 
-    .stadium-shell {
-      position: absolute;
-      inset: 8px;
-      background: #eceff4;
-      border: 4px solid #d1d5db;
-      box-shadow: inset 0 0 0 3px #eff2f7;
-      clip-path: polygon(
-        12% 8%, 28% 2%, 50% 0%, 73% 3%, 88% 10%,
-        97% 26%, 99% 48%, 97% 74%, 88% 90%, 73% 97%,
-        50% 100%, 27% 97%, 12% 90%, 3% 74%, 1% 48%, 3% 26%
-      );
+    .stadium-map {
+      width: 100%;
+      max-width: 900px;
+      height: 780px;
+      margin: 0 auto;
+      display: block;
+      background: #d8dde4;
+      border: 1px solid #c9d0db;
+      border-radius: 34px;
+      transform-origin: center center;
+      transition: transform 0.2s ease;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .stadium-map.dragging {
+      cursor: grabbing;
+    }
+
+    .bowl-shell {
+      fill: #ebeef3;
+      stroke: #cdd3db;
+      stroke-width: 4px;
     }
 
     .stadium-track {
-      position: absolute;
-      inset: 84px;
-      border-radius: 50%;
-      background: #f3f4f6;
-      border: 2px solid #dde0e5;
-      z-index: 1;
+      fill: #eceff4;
+      stroke: #cfd5dc;
+      stroke-width: 3px;
+    }
+
+    .stadium-track-inner {
+      fill: none;
+      stroke: #cfd5dd;
+      stroke-width: 4px;
     }
 
     .field {
-      position: absolute;
-      inset: 156px;
-      border-radius: 50%;
-      background: #4f8f34;
-      box-shadow: inset 0 0 0 8px rgba(255, 255, 255, 0.45);
-      z-index: 2;
+      fill: #4f9238;
+      stroke: #d6e6cb;
+      stroke-width: 10px;
     }
 
-    .pitch {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: 28px;
-      height: 94px;
-      border-radius: 10px;
-      border: 3px solid #da8f22;
-      background: #f7a83d;
-      z-index: 3;
-      box-shadow: 0 0 0 18px rgba(28, 89, 26, 0.5);
+    .pitch-shadow {
+      fill: rgba(26, 98, 29, 0.55);
     }
 
-    .seat-ring,
-    .numbering-layer,
-    .price-badges {
-      position: absolute;
-      inset: 0;
-      z-index: 10;
+    .pitch-strip {
+      fill: #f5ad42;
+      stroke: #d98c20;
+      stroke-width: 4px;
     }
 
-    .numbering-layer {
-      z-index: 12;
-      pointer-events: none;
+    .pitch-mark {
+      stroke: rgba(255, 255, 255, 0.6);
+      stroke-width: 3px;
+      stroke-linecap: round;
     }
 
-    .price-badges {
-      z-index: 20;
-    }
-
-    .stadium-seat {
-      position: absolute;
-      border: 2px solid #ffffff;
-      border-radius: 10px;
-      clip-path: polygon(8% 4%, 92% 0%, 100% 96%, 0% 100%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1px;
+    .section-node path {
+      stroke: #ffffff;
+      stroke-width: 3.2px;
+      transition: fill 0.14s ease, stroke 0.14s ease, filter 0.14s ease, opacity 0.14s ease;
       cursor: pointer;
-      user-select: none;
-      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
-      transform-origin: center center;
-      text-align: center;
-      padding: 4px 5px;
-      width: 74px;
-      height: 50px;
     }
 
-    .stadium-seat.grandstand {
-      width: 70px;
-      height: 44px;
+    .section-node.available path {
+      fill: #b7dc84;
     }
 
-    .stadium-seat .seat-id {
-      font-size: 12px;
-      font-weight: 900;
-      line-height: 1;
-      letter-spacing: 0.2px;
+    .section-node.limited path {
+      fill: #e7cdd1;
     }
 
-    .stadium-seat .seat-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 0;
-    }
-
-    .stadium-seat.available {
-      background: #b9dd88;
-      color: #3f5b1d;
-    }
-
-    .stadium-seat.grandstand.available {
-      background: #a7cf69;
-      color: #29440f;
-    }
-
-    .stadium-seat.booked {
-      background: #e7c8ca;
-      color: #8d1b1b;
+    .section-node.sold path {
+      fill: #bcc4cf;
       cursor: not-allowed;
     }
 
-    .stadium-seat.selected {
-      background: #0f172a;
-      color: #ffffff;
-      border-color: #0f172a;
+    .section-node.hover.available path {
+      fill: #9fcd63;
     }
 
-    .price-tag {
-      position: absolute;
-      min-width: 98px;
-      padding: 6px 8px 5px;
-      border-radius: 12px;
-      border: 1px solid #e3e6ed;
-      background: #ffffff;
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-      text-align: center;
-      transform: translate(-50%, -50%);
+    .section-node.hover.limited path {
+      fill: #dfb6bc;
+    }
+
+    .section-node.selected path {
+      stroke: #0f172a;
+      stroke-width: 4.8px;
+      filter: url(#selectedGlow);
+    }
+
+    .section-node text {
+      font-size: 14px;
+      font-weight: 900;
+      fill: #35561b;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .section-node.limited text,
+    .section-node.sold text {
+      fill: #8a1f1f;
+    }
+
+    .section-node.sold text {
+      fill: #5f6b79;
+    }
+
+    .label-layer {
       pointer-events: none;
     }
 
-    .price-tag strong {
-      display: block;
-      font-size: 11px;
+    .price-label {
+      filter: url(#priceShadow);
+    }
+
+    .price-label rect {
+      fill: #ffffff;
+      stroke: #e3e7ed;
+      stroke-width: 1px;
+      rx: 12px;
+    }
+
+    .price-label .price-main {
+      fill: #101826;
+      font-size: 13px;
       font-weight: 900;
-      color: #0f172a;
-      line-height: 1.05;
+      text-anchor: middle;
     }
 
-    .price-tag span {
-      display: block;
-      font-size: 10px;
+    .price-label .price-sub {
+      fill: #f43388;
+      font-size: 11px;
       font-weight: 800;
-      color: #f43388;
-      line-height: 1.05;
-      margin-top: 2px;
+      text-anchor: middle;
     }
 
-    .number-tile {
-      position: absolute;
-      width: 22px;
-      height: 16px;
-      border-radius: 3px;
-      background: #d7dbe0;
-      color: #9aa2ac;
-      border: 1px solid #c6ccd4;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .price-label.amazing .price-sub {
+      fill: #19a972;
+    }
+
+    .price-label.selected rect {
+      fill: #0f172a;
+      stroke: #0f172a;
+    }
+
+    .price-label.selected .price-main,
+    .price-label.selected .price-sub {
+      fill: #ffffff;
+    }
+
+    .tile-number rect {
+      fill: #d6dbe2;
+      stroke: #c6cdd6;
+      stroke-width: 1px;
+      rx: 3px;
+    }
+
+    .tile-number text {
+      fill: #9aa3ad;
       font-size: 9px;
       font-weight: 800;
-      transform: translate(-50%, -50%);
-      line-height: 1;
+      text-anchor: middle;
+      dominant-baseline: middle;
     }
 
     .stadium-hint {
@@ -637,14 +635,94 @@
       line-height: 1.45;
     }
 
-    .price-tag.selected {
-      background: #0f172a;
-      border-color: #0f172a;
+    .section-drawer {
+      border: 1px solid #d4dce7;
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 14px;
+      margin-bottom: 16px;
     }
 
-    .price-tag.selected strong,
-    .price-tag.selected span {
-      color: #ffffff;
+    .drawer-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-weight: 800;
+      color: #0b1a33;
+    }
+
+    .drawer-status {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .drawer-status.status-none {
+      background: #eef2f7;
+      color: #607086;
+      border-color: #d7deea;
+    }
+
+    .drawer-status.status-available {
+      background: #e7f5d4;
+      color: #2e5b18;
+      border-color: #bcdfa0;
+    }
+
+    .drawer-status.status-limited {
+      background: #f7e5e8;
+      color: #93263a;
+      border-color: #ebc0c9;
+    }
+
+    .drawer-status.status-sold {
+      background: #eceff4;
+      color: #687585;
+      border-color: #d6dce4;
+    }
+
+    .drawer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+      color: #43546b;
+      margin-bottom: 8px;
+      gap: 12px;
+    }
+
+    .drawer-row strong {
+      color: #0b1a33;
+      font-size: 14px;
+      text-align: right;
+      max-width: 60%;
+      word-break: break-word;
+    }
+
+    .drawer-book-btn {
+      margin-top: 10px;
+      width: 100%;
+      border-radius: 12px;
+      border: none;
+      background: #0b1a33;
+      color: #fff;
+      padding: 11px 14px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .drawer-book-btn:hover {
+      background: #112a53;
+    }
+
+    .drawer-book-btn:disabled {
+      background: #a0acbe;
+      cursor: not-allowed;
     }
 
     .grandstand-box {
@@ -783,33 +861,20 @@
         height: 620px;
       }
 
-      .stadium-seat {
-        width: 58px;
-        height: 40px;
+      .section-node text {
+        font-size: 12px;
       }
 
-      .stadium-seat.grandstand {
-        width: 54px;
-        height: 34px;
-      }
-
-      .number-tile {
-        width: 18px;
-        height: 14px;
-        font-size: 8px;
-      }
-
-      .price-tag {
-        min-width: 92px;
-        padding: 6px 8px;
-      }
-
-      .price-tag strong {
+      .price-label .price-main {
         font-size: 11px;
       }
 
-      .price-tag span {
+      .price-label .price-sub {
         font-size: 10px;
+      }
+
+      .drawer-row {
+        font-size: 13px;
       }
 
       .event-card,
@@ -910,6 +975,7 @@
             <div class="seat-legend">
               <span><i class="legend-box available-box"></i> Available</span>
               <span><i class="legend-box grandstand-box"></i> Grandstand</span>
+              <span><i class="legend-box limited-box"></i> Limited</span>
               <span><i class="legend-box selected-box"></i> Selected</span>
               <span><i class="legend-box booked-box"></i> Booked</span>
             </div>
@@ -919,23 +985,65 @@
               <div class="map-zoom">
                 <button class="zoom-btn" id="zoomInBtn" type="button">+</button>
                 <button class="zoom-btn" id="zoomOutBtn" type="button">−</button>
+                <button class="zoom-btn zoom-reset-btn" id="zoomResetBtn" type="button">↺</button>
               </div>
 
-              <div class="stadium-map" id="stadiumMap">
-                <div class="stadium-shell"></div>
-                <div class="stadium-track"></div>
-                <div class="field"></div>
-                <div class="pitch"></div>
-                <div class="seat-ring" id="seatRing"></div>
-                <div class="numbering-layer" id="numberingLayer"></div>
-                <div class="price-badges" id="priceBadges"></div>
-              </div>
+              <svg
+                class="stadium-map"
+                id="stadiumMap"
+                viewBox="0 0 1100 820"
+                role="img"
+                aria-label="Interactive IPL stadium booking map"
+              >
+                <defs>
+                  <filter id="priceShadow" x="-30%" y="-30%" width="160%" height="180%">
+                    <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.14"></feDropShadow>
+                  </filter>
+                  <filter id="selectedGlow" x="-35%" y="-35%" width="170%" height="170%">
+                    <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.35"></feDropShadow>
+                  </filter>
+                </defs>
+
+                <g id="zoomLayer">
+                  <path
+                    class="bowl-shell"
+                    d="M140 265 C180 145 300 70 470 45 C700 10 905 70 988 210 C1040 300 1048 510 996 620 C928 760 770 806 548 806 C360 806 220 764 156 652 C112 570 102 355 140 265 Z"
+                  ></path>
+
+                  <ellipse class="stadium-track" cx="550" cy="420" rx="390" ry="306"></ellipse>
+                  <ellipse class="stadium-track-inner" cx="550" cy="420" rx="348" ry="274"></ellipse>
+                  <ellipse class="field" cx="550" cy="420" rx="306" ry="238"></ellipse>
+
+                  <g class="pitch-wrap">
+                    <ellipse class="pitch-shadow" cx="550" cy="420" rx="46" ry="72"></ellipse>
+                    <rect class="pitch-strip" x="538" y="372" width="24" height="96" rx="9"></rect>
+                    <line class="pitch-mark" x1="542" y1="390" x2="558" y2="390"></line>
+                    <line class="pitch-mark" x1="542" y1="450" x2="558" y2="450"></line>
+                  </g>
+
+                  <g id="tileLayer" class="tile-layer"></g>
+                  <g id="sectionLayer" class="section-layer"></g>
+                  <g id="labelLayer" class="label-layer"></g>
+                </g>
+              </svg>
             </div>
             <p class="stadium-hint">Hover any section to see price. Click to select. Selected sections stay highlighted and appear in checkout with exact seat IDs.</p>
           </div>
 
           <div class="checkout-box">
             <h3>Checkout</h3>
+
+            <div class="section-drawer" id="sectionDrawer">
+              <div class="drawer-head">
+                <span>Section Details</span>
+                <span class="drawer-status status-none" id="drawerStatus">Select</span>
+              </div>
+              <div class="drawer-row"><span>Section</span><strong id="drawerSectionId">-</strong></div>
+              <div class="drawer-row"><span>Stand</span><strong id="drawerStand">-</strong></div>
+              <div class="drawer-row"><span>Price</span><strong id="drawerPrice">INR 0</strong></div>
+              <div class="drawer-row"><span>Seats Left</span><strong id="drawerSeatsLeft">-</strong></div>
+              <button type="button" class="drawer-book-btn" id="drawerBookBtn">Book Now</button>
+            </div>
 
             <div class="summary-line">
               <span>Match</span>
@@ -1128,12 +1236,14 @@
     const bookingPanel = document.getElementById("bookingPanel");
     const bookingTitle = document.getElementById("bookingTitle");
     const bookingMeta = document.getElementById("bookingMeta");
-    const seatRing = document.getElementById("seatRing");
-    const numberingLayer = document.getElementById("numberingLayer");
-    const priceBadges = document.getElementById("priceBadges");
     const stadiumMap = document.getElementById("stadiumMap");
+    const zoomLayer = document.getElementById("zoomLayer");
+    const sectionLayer = document.getElementById("sectionLayer");
+    const tileLayer = document.getElementById("tileLayer");
+    const labelLayer = document.getElementById("labelLayer");
     const zoomInBtn = document.getElementById("zoomInBtn");
     const zoomOutBtn = document.getElementById("zoomOutBtn");
+    const zoomResetBtn = document.getElementById("zoomResetBtn");
 
     const summaryMatch = document.getElementById("summaryMatch");
     const summarySeats = document.getElementById("summarySeats");
@@ -1146,14 +1256,26 @@
     const paymentMethod = document.getElementById("paymentMethod");
     const payNowBtn = document.getElementById("payNowBtn");
     const toast = document.getElementById("toast");
+    const drawerStatus = document.getElementById("drawerStatus");
+    const drawerSectionId = document.getElementById("drawerSectionId");
+    const drawerStand = document.getElementById("drawerStand");
+    const drawerPrice = document.getElementById("drawerPrice");
+    const drawerSeatsLeft = document.getElementById("drawerSeatsLeft");
+    const drawerBookBtn = document.getElementById("drawerBookBtn");
 
     let allEvents = [...fallbackEvents];
     let events = [...fallbackEvents];
     let currentEvent = null;
     let selectedSeats = [];
     let seatData = [];
+    let activeSectionId = null;
     let hoveredSeatId = null;
     let stadiumZoom = 1;
+    let stadiumPanX = 0;
+    let stadiumPanY = 0;
+    let isDraggingMap = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
     let viagogoPrices = [];
     let viagogoPriceFetchedAt = 0;
 
@@ -1532,164 +1654,360 @@
     }
 
     function generateSeats() {
-      seatData = [];
-      const rows = ["A", "B", "C", "D", "E", "F"];
       const eventSeed = currentEvent?.id || "match";
+      const alphaOuter = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+      const alphaInner = ["N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y"];
 
-      for (let r = 0; r < rows.length; r += 1) {
-        for (let c = 1; c <= 8; c += 1) {
-          const seatId = `${rows[r]}${c}`;
-          const booked = stableHash(`${eventSeed}:${seatId}:booked`) % 100 < 22;
-          seatData.push({
-            id: seatId,
-            booked,
-            grandstand: false,
-            price: getSeatPriceFor(eventSeed, seatId, false)
+      function getRangeList(count, startAngle, endAngle, gap, aisleAfter = [], aisleGap = 0) {
+        const ranges = [];
+        const totalAisleGap = aisleAfter.length * aisleGap;
+        const segmentSize = (endAngle - startAngle - totalAisleGap) / count;
+        let cursor = startAngle;
+
+        for (let i = 0; i < count; i += 1) {
+          ranges.push({
+            start: cursor + gap / 2,
+            end: cursor + segmentSize - gap / 2
           });
+          cursor += segmentSize;
+          if (aisleAfter.includes(i)) {
+            cursor += aisleGap;
+          }
+        }
+
+        return ranges;
+      }
+
+      function pickStatus(seed, soldWeight, limitedWeight, forceStatus = null) {
+        if (forceStatus) return forceStatus;
+        const score = stableHash(`${seed}:status`) % 100;
+        if (score < soldWeight) return "sold";
+        if (score < soldWeight + limitedWeight) return "limited";
+        return "available";
+      }
+
+      function buildRingSections(config) {
+        const ranges = getRangeList(
+          config.count,
+          config.startAngle,
+          config.endAngle,
+          config.gap,
+          config.aisleAfter || [],
+          config.aisleGap || 0
+        );
+
+        return ranges.map((range, index) => {
+          const id = `${config.prefix}${index + 1}`;
+          const seed = `${eventSeed}:${id}`;
+          const status = pickStatus(seed, config.soldWeight || 14, config.limitedWeight || 24, config.forceStatus);
+          const isSold = status === "sold";
+          const seatsLeft = isSold
+            ? 0
+            : status === "limited"
+              ? 1 + (stableHash(`${seed}:left`) % 3)
+              : 4 + (stableHash(`${seed}:left`) % 8);
+          const labelTypePick = stableHash(`${seed}:label`) % 8;
+          const labelType = isSold
+            ? "none"
+            : labelTypePick === 0
+              ? "amazing"
+              : labelTypePick <= 2
+                ? "left"
+                : "none";
+
+          return {
+            id,
+            mapLabel: config.labelPrefix || config.labels[index % config.labels.length],
+            stand: `${config.standName} ${index + 1}`,
+            price: getSeatPriceFor(eventSeed, id, Boolean(config.grandstand)),
+            seatsLeft,
+            status,
+            booked: isSold,
+            labelType,
+            startAngle: range.start,
+            endAngle: range.end,
+            innerRx: config.innerRx,
+            innerRy: config.innerRy,
+            outerRx: config.outerRx,
+            outerRy: config.outerRy,
+            grandstand: Boolean(config.grandstand),
+            mini: Boolean(config.mini)
+          };
+        });
+      }
+
+      const outerSections = buildRingSections({
+        prefix: "S",
+        labels: alphaOuter,
+        standName: "Upper Pavilion",
+        count: 24,
+        startAngle: 148,
+        endAngle: 392,
+        gap: 1.2,
+        aisleAfter: [5, 11, 17],
+        aisleGap: 2.6,
+        innerRx: 424,
+        innerRy: 307,
+        outerRx: 500,
+        outerRy: 360,
+        soldWeight: 10,
+        limitedWeight: 21
+      });
+
+      const middleSections = buildRingSections({
+        prefix: "M",
+        labels: alphaInner,
+        standName: "Lower Pavilion",
+        count: 20,
+        startAngle: 155,
+        endAngle: 385,
+        gap: 1.1,
+        aisleAfter: [4, 9, 14],
+        aisleGap: 2.2,
+        innerRx: 372,
+        innerRy: 272,
+        outerRx: 422,
+        outerRy: 306,
+        soldWeight: 16,
+        limitedWeight: 26
+      });
+
+      const innerSections = buildRingSections({
+        prefix: "I",
+        labels: alphaOuter,
+        standName: "Inner Ring",
+        count: 16,
+        startAngle: 162,
+        endAngle: 378,
+        gap: 1.1,
+        aisleAfter: [3, 7, 11],
+        aisleGap: 2,
+        innerRx: 334,
+        innerRy: 246,
+        outerRx: 372,
+        outerRy: 271,
+        soldWeight: 14,
+        limitedWeight: 30
+      });
+
+      const grandstandSections = buildRingSections({
+        prefix: "GS",
+        labels: ["GS"],
+        labelPrefix: "GS",
+        standName: "Grandstand",
+        count: 8,
+        startAngle: 80,
+        endAngle: 100,
+        gap: 1.2,
+        innerRx: 258,
+        innerRy: 312,
+        outerRx: 340,
+        outerRy: 370,
+        soldWeight: 8,
+        limitedWeight: 20,
+        grandstand: true
+      });
+
+      const miniDisabledSections = buildRingSections({
+        prefix: "X",
+        labels: [""],
+        standName: "Aisle Block",
+        count: 12,
+        startAngle: 62,
+        endAngle: 118,
+        gap: 1.4,
+        innerRx: 388,
+        innerRy: 288,
+        outerRx: 408,
+        outerRy: 303,
+        soldWeight: 100,
+        limitedWeight: 0,
+        forceStatus: "sold",
+        mini: true
+      });
+
+      seatData = [
+        ...outerSections,
+        ...middleSections,
+        ...innerSections,
+        ...grandstandSections,
+        ...miniDisabledSections
+      ];
+    }
+
+    function pointOnEllipse(rx, ry, angleDeg) {
+      const angleRad = (angleDeg * Math.PI) / 180;
+      return {
+        x: 550 + rx * Math.cos(angleRad),
+        y: 420 + ry * Math.sin(angleRad)
+      };
+    }
+
+    function describeSectionPath(section) {
+      const p1 = pointOnEllipse(section.outerRx, section.outerRy, section.startAngle);
+      const p2 = pointOnEllipse(section.outerRx, section.outerRy, section.endAngle);
+      const p3 = pointOnEllipse(section.innerRx, section.innerRy, section.endAngle);
+      const p4 = pointOnEllipse(section.innerRx, section.innerRy, section.startAngle);
+      const span = Math.abs(section.endAngle - section.startAngle);
+      const largeArc = span > 180 ? 1 : 0;
+      return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${section.outerRx} ${section.outerRy} 0 ${largeArc} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)} L ${p3.x.toFixed(2)} ${p3.y.toFixed(2)} A ${section.innerRx} ${section.innerRy} 0 ${largeArc} 0 ${p4.x.toFixed(2)} ${p4.y.toFixed(2)} Z`;
+    }
+
+    function getSectionCenter(section, extraRx = 0, extraRy = 0) {
+      const midAngle = (section.startAngle + section.endAngle) / 2;
+      const rx = (section.innerRx + section.outerRx) / 2 + extraRx;
+      const ry = (section.innerRy + section.outerRy) / 2 + extraRy;
+      return pointOnEllipse(rx, ry, midAngle);
+    }
+
+    function renderNumberTiles() {
+      const tiles = [];
+      let number = 1;
+      for (let i = 0; i < 29; i += 1) {
+        const t = i / 28;
+        const angle = 158 + t * 224;
+        const point = pointOnEllipse(397, 289, angle);
+        tiles.push(`
+          <g class="tile-number" transform="translate(${point.x.toFixed(1)} ${point.y.toFixed(1)})">
+            <rect x="-10" y="-7" width="20" height="14"></rect>
+            <text x="0" y="0">${number}</text>
+          </g>
+        `);
+        number += 1;
+      }
+
+      let number2 = 30;
+      for (let r = 0; r < 4; r += 1) {
+        for (let c = 0; c < 7; c += 1) {
+          if (number2 > 57) break;
+          const x = 646 + c * 24;
+          const y = 688 + r * 22;
+          tiles.push(`
+            <g class="tile-number" transform="translate(${x} ${y})">
+              <rect x="-10" y="-7" width="20" height="14"></rect>
+              <text x="0" y="0">${number2}</text>
+            </g>
+          `);
+          number2 += 1;
         }
       }
 
-      for (let c = 1; c <= 12; c += 1) {
-        const seatId = `GS${c}`;
-        const booked = stableHash(`${eventSeed}:${seatId}:booked`) % 100 < 16;
-        seatData.push({
-          id: seatId,
-          booked,
-          grandstand: true,
-          price: getSeatPriceFor(eventSeed, seatId, true)
-        });
+      tileLayer.innerHTML = tiles.join("");
+    }
+
+    function renderPriceLabels() {
+      const labels = [];
+      const focusedSet = new Set(selectedSeats);
+      if (hoveredSeatId) focusedSet.add(hoveredSeatId);
+
+      const prioritySections = seatData
+        .filter((section) => !section.mini && section.status !== "sold")
+        .filter((section) => section.labelType !== "none" || focusedSet.has(section.id))
+        .sort((a, b) => {
+          const aPriority = focusedSet.has(a.id) ? 100 : a.labelType === "amazing" ? 80 : 50;
+          const bPriority = focusedSet.has(b.id) ? 100 : b.labelType === "amazing" ? 80 : 50;
+          return bPriority - aPriority;
+        })
+        .slice(0, 22);
+
+      prioritySections.forEach((section) => {
+        const isSelected = selectedSeats.includes(section.id);
+        const pos = getSectionCenter(section, section.grandstand ? 28 : 34, section.grandstand ? 26 : 28);
+        const subText = section.labelType === "amazing" ? "Amazing" : `${section.seatsLeft} left`;
+        labels.push(`
+          <g class="price-label ${section.labelType === "amazing" ? "amazing" : ""} ${isSelected ? "selected" : ""}" transform="translate(${pos.x.toFixed(1)} ${pos.y.toFixed(1)})">
+            <rect x="-62" y="-23" width="124" height="46"></rect>
+            <text class="price-main" x="0" y="-5">${formatInrCompact(section.price)}</text>
+            <text class="price-sub" x="0" y="13">${subText}</text>
+          </g>
+        `);
+      });
+
+      labelLayer.innerHTML = labels.join("");
+    }
+
+    function updateSectionDrawer() {
+      const active = seatData.find((section) => section.id === activeSectionId)
+        || seatData.find((section) => section.id === selectedSeats[0])
+        || null;
+
+      if (!active) {
+        drawerStatus.className = "drawer-status status-none";
+        drawerStatus.textContent = "Select";
+        drawerSectionId.textContent = "-";
+        drawerStand.textContent = "-";
+        drawerPrice.textContent = "INR 0";
+        drawerSeatsLeft.textContent = "-";
+        drawerBookBtn.disabled = true;
+        drawerBookBtn.textContent = "Book Now";
+        return;
       }
+
+      drawerStatus.className = `drawer-status status-${active.status}`;
+      drawerStatus.textContent = active.status === "sold" ? "Sold Out" : active.status === "limited" ? "Limited" : "Available";
+      drawerSectionId.textContent = `${active.id} (${active.mapLabel})`;
+      drawerStand.textContent = active.stand;
+      drawerPrice.textContent = formatInr(active.price);
+      drawerSeatsLeft.textContent = active.status === "sold" ? "Sold Out" : String(active.seatsLeft);
+      drawerBookBtn.disabled = active.status === "sold";
+      drawerBookBtn.textContent = active.status === "sold"
+        ? "Sold Out"
+        : selectedSeats.includes(active.id)
+          ? "Added"
+          : "Book Now";
     }
 
     function renderSeats() {
-      const centerX = 430;
-      const centerY = 394;
-      const seatMarkup = [];
-      const numberMarkup = [];
-      const badgeMarkup = [];
-      const arcStart = 120;
-      const arcEnd = 420;
-      const arcSpan = arcEnd - arcStart;
-      const laneSlotCount = 16;
-      const laneConfigs = {
-        AB: { baseRadius: 340, angleOffset: 0, rowNudges: { A: 10, B: -8 }, baseOrder: 0 },
-        CD: { baseRadius: 302, angleOffset: 2.4, rowNudges: { C: 8, D: -7 }, baseOrder: 16 },
-        EF: { baseRadius: 266, angleOffset: -2.4, rowNudges: { E: 8, F: -7 }, baseOrder: 32 }
-      };
+      const markup = seatData
+        .map((section) => {
+          const classes = [
+            "section-node",
+            section.status,
+            section.grandstand ? "grandstand" : "",
+            section.mini ? "mini" : "",
+            selectedSeats.includes(section.id) ? "selected" : "",
+            hoveredSeatId === section.id ? "hover" : ""
+          ]
+            .filter(Boolean)
+            .join(" ");
+          const path = describeSectionPath(section);
+          const center = getSectionCenter(section);
+          const labelMarkup = section.mini
+            ? ""
+            : `<text x="${center.x.toFixed(1)}" y="${center.y.toFixed(1)}">${section.mapLabel}</text>`;
 
-      function getStandardLayout(seatId) {
-        const row = seatId.charAt(0);
-        const seatNum = clamp(Number.parseInt(seatId.slice(1), 10), 1, 8);
-        const laneKey = row === "A" || row === "B"
-          ? "AB"
-          : row === "C" || row === "D"
-            ? "CD"
-            : "EF";
-        const lane = laneConfigs[laneKey];
-        const rowShift = row === "A" || row === "C" || row === "E" ? 0 : 1;
-        const slot = (seatNum - 1) * 2 + rowShift;
-        const slotRatio = slot / (laneSlotCount - 1);
-        const angle = arcStart + slotRatio * arcSpan + lane.angleOffset;
-        return {
-          angle,
-          radius: lane.baseRadius + (lane.rowNudges[row] || 0),
-          order: lane.baseOrder + slot
-        };
-      }
+          return `
+            <g class="${classes}" data-id="${section.id}">
+              <path d="${path}"></path>
+              ${labelMarkup}
+            </g>
+          `;
+        })
+        .join("");
 
-      function getGrandstandLayout(seatId) {
-        const index = clamp(Number.parseInt(seatId.replace("GS", ""), 10) - 1, 0, 11);
-        const row = Math.floor(index / 6);
-        const col = index % 6;
-        const gsStart = 74;
-        const gsSpan = 32;
-        const gsStep = gsSpan / 5;
-        return {
-          angle: gsStart + col * gsStep + (row === 0 ? -1 : 1),
-          radius: row === 0 ? 346 : 322,
-          order: 100 + index
-        };
-      }
+      sectionLayer.innerHTML = markup;
+      renderNumberTiles();
+      renderPriceLabels();
+      updateSectionDrawer();
 
-      seatData.forEach((seat) => {
-        const layout = seat.grandstand ? getGrandstandLayout(seat.id) : getStandardLayout(seat.id);
-        const { angle, radius, order } = layout;
-        const rad = (angle * Math.PI) / 180;
-        const x = centerX + radius * Math.cos(rad);
-        const y = centerY + radius * Math.sin(rad);
-        const badgeRadius = radius + (seat.grandstand ? 44 : 38);
-        const bx = centerX + badgeRadius * Math.cos(rad);
-        const by = centerY + badgeRadius * Math.sin(rad);
-        const isSelected = selectedSeats.includes(seat.id);
-        const isHovered = hoveredSeatId === seat.id;
-        const leftCount = seat.booked ? 0 : 1 + (stableHash(`${seat.id}:${currentEvent?.id || "match"}:left`) % 10);
-        const showPersistentBadge = seat.grandstand ? order % 3 === 0 : order % 5 === 0;
-
-        let classes = "stadium-seat ";
-        if (seat.grandstand) classes += "grandstand ";
-        if (seat.booked) classes += "booked";
-        else if (isSelected) classes += "selected";
-        else classes += "available";
-
-        seatMarkup.push(`
-          <button
-            type="button"
-            class="${classes}"
-            onclick="toggleSeat('${seat.id}')"
-            onmouseenter="setHoverSeat('${seat.id}')"
-            onmouseleave="clearHoverSeat()"
-            style="left:${x}px; top:${y}px; transform: translate(-50%, -50%) rotate(${angle + 90}deg);"
-            title="${seat.id} - ${formatInrCompact(seat.price)}"
-          >
-            <span class="seat-content" style="transform: rotate(${-(angle + 90)}deg);">
-              <span class="seat-id">${seat.grandstand ? "GS" : seat.id.charAt(0)}</span>
-            </span>
-          </button>
-        `);
-
-        if (!seat.booked && (showPersistentBadge || isSelected || isHovered)) {
-          badgeMarkup.push(`
-            <div class="price-tag ${isSelected ? "selected" : ""}" style="left:${bx}px; top:${by}px;">
-              <strong>${formatInrCompact(seat.price)}</strong>
-              <span>${leftCount} left</span>
-            </div>
-          `);
-        }
+      sectionLayer.querySelectorAll(".section-node").forEach((node) => {
+        const id = node.getAttribute("data-id");
+        node.addEventListener("mouseenter", () => setHoverSeat(id));
+        node.addEventListener("mouseleave", () => clearHoverSeat());
+        node.addEventListener("click", () => toggleSeat(id));
       });
+    }
 
-      let tile = 1;
-      const numberArcStart = 126;
-      const numberArcEnd = 414;
-      const numberArcSpan = numberArcEnd - numberArcStart;
-      for (let i = 0; i < 29; i += 1) {
-        const t = i / 28;
-        const angle = numberArcStart + t * numberArcSpan;
-        const radius = 288;
-        const rad = (angle * Math.PI) / 180;
-        const x = centerX + radius * Math.cos(rad);
-        const y = centerY + radius * Math.sin(rad);
-        numberMarkup.push(`<div class="number-tile" style="left:${x}px; top:${y}px;">${tile}</div>`);
-        tile += 1;
-      }
+    function applyMapTransform() {
+      zoomLayer.setAttribute("transform", `translate(${stadiumPanX.toFixed(1)} ${stadiumPanY.toFixed(1)}) scale(${stadiumZoom.toFixed(3)})`);
+    }
 
-      let tile2 = 30;
-      const gridStartX = 584;
-      const gridStartY = 642;
-      const gapX = 22;
-      const gapY = 20;
-      for (let r = 0; r < 4; r += 1) {
-        for (let c = 0; c < 7; c += 1) {
-          if (tile2 > 57) break;
-          const x = gridStartX + c * gapX;
-          const y = gridStartY + r * gapY;
-          numberMarkup.push(`<div class="number-tile" style="left:${x}px; top:${y}px;">${tile2}</div>`);
-          tile2 += 1;
-        }
-      }
-
-      seatRing.innerHTML = seatMarkup.join("");
-      numberingLayer.innerHTML = numberMarkup.join("");
-      priceBadges.innerHTML = badgeMarkup.join("");
+    function resetMapView() {
+      stadiumZoom = 1;
+      stadiumPanX = 0;
+      stadiumPanY = 0;
+      applyMapTransform();
+      stadiumMap.classList.remove("dragging");
     }
 
     function getSelectedSeatItems() {
@@ -1728,10 +2046,10 @@
       }
 
       selectedSeats = [];
+      activeSectionId = null;
       hoveredSeatId = null;
       generateSeats();
-      stadiumZoom = 1;
-      stadiumMap.style.transform = "scale(1)";
+      resetMapView();
 
       bookingTitle.textContent = currentEvent.title;
       bookingMeta.textContent = `${currentEvent.time} | ${currentEvent.city}, ${currentEvent.location} | ${currentEvent.stadium}`;
@@ -1746,7 +2064,15 @@
 
     function toggleSeat(seatId) {
       const seat = seatData.find((item) => item.id === seatId);
-      if (!seat || seat.booked) {
+      if (!seat) {
+        return;
+      }
+
+      activeSectionId = seatId;
+
+      if (seat.status === "sold" || seat.booked) {
+        updateSectionDrawer();
+        showToast(`${seat.id} is sold out`);
         return;
       }
 
@@ -1775,6 +2101,23 @@
       hoveredSeatId = null;
       renderSeats();
     }
+
+    drawerBookBtn.addEventListener("click", () => {
+      const active = seatData.find((section) => section.id === activeSectionId);
+      if (!active || active.status === "sold") {
+        return;
+      }
+
+      if (!selectedSeats.includes(active.id)) {
+        selectedSeats.push(active.id);
+        showToast(`${active.id} added to booking`);
+      } else {
+        showToast(`${active.id} already selected`);
+      }
+
+      renderSeats();
+      updateSummary();
+    });
 
     payNowBtn.addEventListener("click", () => {
       if (!currentEvent) {
@@ -1894,15 +2237,61 @@
     dateFilter.addEventListener("change", renderEvents);
     priceFilter.addEventListener("change", renderEvents);
 
+    function zoomMap(delta) {
+      stadiumZoom = clamp(stadiumZoom + delta, 0.68, 2.2);
+      applyMapTransform();
+    }
+
     zoomInBtn.addEventListener("click", () => {
-      stadiumZoom = Math.min(1.45, stadiumZoom + 0.08);
-      stadiumMap.style.transform = `scale(${stadiumZoom})`;
+      zoomMap(0.1);
     });
 
     zoomOutBtn.addEventListener("click", () => {
-      stadiumZoom = Math.max(0.72, stadiumZoom - 0.08);
-      stadiumMap.style.transform = `scale(${stadiumZoom})`;
+      zoomMap(-0.1);
     });
+
+    zoomResetBtn.addEventListener("click", () => {
+      resetMapView();
+    });
+
+    stadiumMap.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      zoomMap(event.deltaY < 0 ? 0.08 : -0.08);
+    }, { passive: false });
+
+    stadiumMap.addEventListener("pointerdown", (event) => {
+      const onSection = event.target.closest(".section-node");
+      if (onSection) {
+        return;
+      }
+
+      isDraggingMap = true;
+      dragStartX = event.clientX - stadiumPanX;
+      dragStartY = event.clientY - stadiumPanY;
+      stadiumMap.classList.add("dragging");
+      stadiumMap.setPointerCapture(event.pointerId);
+    });
+
+    stadiumMap.addEventListener("pointermove", (event) => {
+      if (!isDraggingMap) {
+        return;
+      }
+      stadiumPanX = event.clientX - dragStartX;
+      stadiumPanY = event.clientY - dragStartY;
+      applyMapTransform();
+    });
+
+    function stopMapDrag() {
+      if (!isDraggingMap) {
+        return;
+      }
+      isDraggingMap = false;
+      stadiumMap.classList.remove("dragging");
+    }
+
+    stadiumMap.addEventListener("pointerup", stopMapDrag);
+    stadiumMap.addEventListener("pointercancel", stopMapDrag);
+    stadiumMap.addEventListener("pointerleave", stopMapDrag);
 
     refreshMatchesBtn.addEventListener("click", () => {
       loadMatches(true);
@@ -1912,6 +2301,8 @@
     updateDashboard();
     renderFeaturedMatch();
     renderEvents();
+    applyMapTransform();
+    updateSectionDrawer();
 
     loadMatches(false);
     setInterval(() => {
