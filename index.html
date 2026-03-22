@@ -781,6 +781,16 @@
     const VIAGOGO_PROXY_PREFIX = "https://r.jina.ai/http://";
     const VIAGOGO_USD_TO_INR = 83;
     const VIAGOGO_PRICE_CACHE_MS = 10 * 60 * 1000;
+    const IMAGE_STANDARD_PRICE_POOL = [
+      4008, 4082, 4305, 4527, 4062, 6058, 5862, 4305,
+      6308, 5343, 13952, 17959, 10242, 16920, 14044, 21035,
+      26716, 5121, 6456, 7421, 11874, 13210, 65899, 74208,
+      74136, 4379, 3636, 5121
+    ];
+    const IMAGE_GRANDSTAND_PRICE_POOL = [
+      1484220, 1410009, 1484220, 65899, 74208, 74136,
+      13210, 11874, 7421, 14044, 16920, 10242
+    ];
 
     const fallbackEvents = [
       {
@@ -1048,30 +1058,12 @@
     }
 
     function getPricePoolForSeats() {
-      if (viagogoPrices.length > 0) {
-        return viagogoPrices;
-      }
-
-      const base = currentEvent?.price || 3000;
-      return [
-        base - 700,
-        base - 450,
-        base - 200,
-        base,
-        base + 250,
-        base + 500,
-        base + 850
-      ]
-        .map((value) => roundToNearest50(clamp(value, 1200, 20000)))
-        .sort((a, b) => a - b);
+      return IMAGE_STANDARD_PRICE_POOL;
     }
 
-    function getSeatPriceFor(eventId, seatId, tierMultiplier) {
-      const pool = getPricePoolForSeats();
-      const base = pool[stableHash(`${eventId}:${seatId}`) % pool.length];
-      const noiseStep = (stableHash(`${seatId}:noise`) % 7) - 3;
-      const noisy = base * tierMultiplier + noiseStep * 50;
-      return roundToNearest50(clamp(noisy, 1200, 20000));
+    function getSeatPriceFor(eventId, seatId, grandstand = false) {
+      const pool = grandstand ? IMAGE_GRANDSTAND_PRICE_POOL : getPricePoolForSeats();
+      return pool[stableHash(`${eventId}:${seatId}`) % pool.length];
     }
 
     async function refreshViagogoPrices(force = false) {
@@ -1312,14 +1304,6 @@
       seatData = [];
       const rows = ["A", "B", "C", "D", "E", "F"];
       const eventSeed = currentEvent?.id || "match";
-      const tierByRow = {
-        A: 1.12,
-        B: 1.08,
-        C: 1.04,
-        D: 1.0,
-        E: 0.96,
-        F: 0.92
-      };
 
       for (let r = 0; r < rows.length; r += 1) {
         for (let c = 1; c <= 8; c += 1) {
@@ -1329,7 +1313,7 @@
             id: seatId,
             booked,
             grandstand: false,
-            price: getSeatPriceFor(eventSeed, seatId, tierByRow[rows[r]])
+            price: getSeatPriceFor(eventSeed, seatId, false)
           });
         }
       }
@@ -1341,7 +1325,7 @@
           id: seatId,
           booked,
           grandstand: true,
-          price: getSeatPriceFor(eventSeed, seatId, 0.82)
+          price: getSeatPriceFor(eventSeed, seatId, true)
         });
       }
     }
