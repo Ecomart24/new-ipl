@@ -253,9 +253,9 @@
     .seat-block{
       position:absolute;
       background:#b6d97d;
-      border:2px solid #f8fafc;
+      border:3px solid #fff;
       color:#4c6b1f;
-      border-radius:4px;
+      border-radius:6px;
       font-size:13px;
       font-weight:800;
       display:flex;
@@ -266,21 +266,13 @@
       transition:.18s ease;
       user-select:none;
       text-align:center;
-      transform-origin:center center;
-      clip-path:polygon(8% 2%, 92% 2%, 100% 100%, 0 100%);
     }
-    .seat-block:hover{filter:brightness(1.03)}
+    .seat-block:hover{transform:translateY(-1px) scale(1.03)}
     .seat-block.active{background:#70bf57;color:#fff}
     .seat-block.low{background:#e7d98b;color:#6c5a14}
     .seat-block.sold{background:#d2d7df;color:#6b7280;cursor:not-allowed}
     .seat-block.tiny{font-size:10px;border-radius:5px}
     .seat-block.mini{font-size:12px}
-    .seat-block.ring-inner{
-      clip-path:polygon(0 0, 100% 0, 94% 100%, 6% 100%);
-    }
-    .seat-block.ring-inner-core{
-      clip-path:polygon(10% 0, 90% 0, 100% 100%, 0 100%);
-    }
 
     .seat-label{
       position:absolute;
@@ -794,16 +786,13 @@
     let activeSection = null;
     const MAX_VISIBLE_PRICE_TAGS = 14;
     const LABEL_PADDING = 8;
-    const FIELD_CENTER_X = 465;
-    const FIELD_CENTER_Y = 410;
-    const sectionLayout = new Map();
+    const VIAGOGO_SOURCE_URLS = [
+      "https://www.viagogo.com/ww/Sports-Tickets/Other-Sports/Cricket/Indian-Premier-League-Tickets?PCID=PSROWADWHOME705948097BC82&MetroRegionID=&psc=&ps=&ps_p=0&ps_c=21191722519&ps_ag=195171730458&ps_tg=kwd-296793056830&ps_ad=799940640148&ps_adp=&ps_fi=&ps_li=&ps_lp=9144440&ps_n=g&ps_d=c&ps_ex=&pscpag=&gad_source=1&gad_campaignid=21191722519&gbraid=0AAAAAD3dCeDdUKEv0tRihYSCmjfzo8YfY&gclid=CjwKCAjwg_nNBhAGEiwAiYPYA6wOuz15O0eJUlqnuxLmCUx2NplTrh62CdKLs_gb7w2s5mhQKCTgBxoC6bQQAvD_BwE",
+      "https://www.viagogo.com/ww/Sports-Tickets/Other-Sports/Cricket/Indian-Premier-League-Tickets"
+    ];
 
     function money(v){
       return match.currency + Number(v).toLocaleString("en-IN");
-    }
-
-    function clamp(value, min, max){
-      return Math.min(max, Math.max(min, value));
     }
 
     function getSectionPriority(sec){
@@ -815,48 +804,6 @@
       return 300;
     }
 
-    function computeSectionLayout(sec){
-      const sourceX = sec.x + sec.w / 2;
-      const sourceY = sec.y + sec.h / 2;
-      const dx = sourceX - FIELD_CENTER_X;
-      const dy = sourceY - FIELD_CENTER_Y;
-      const angle = Math.atan2(dy, dx);
-      const distance = Math.hypot(dx, dy);
-
-      let ring = "outer";
-      let radius = 350;
-
-      if (distance < 300 || sec.mini || sec.tiny) {
-        ring = "inner";
-        radius = 306;
-      }
-      if (distance < 250) {
-        ring = "inner-core";
-        radius = 275;
-      }
-      if (sec.group === "sold" && ring === "outer") {
-        radius -= 8;
-      }
-
-      let width = clamp(sec.w * (ring === "outer" ? 0.9 : 0.82), 42, 106);
-      let height = clamp(sec.h * (ring === "outer" ? 0.68 : 0.58), 26, 64);
-
-      if (sec.mini) {
-        width = clamp(width * 0.85, 36, 86);
-        height = clamp(height * 0.88, 24, 52);
-      }
-      if (sec.tiny) {
-        width = clamp(width * 0.78, 32, 72);
-        height = clamp(height * 0.78, 20, 40);
-      }
-
-      const cx = FIELD_CENTER_X + Math.cos(angle) * radius;
-      const cy = FIELD_CENTER_Y + Math.sin(angle) * radius;
-      const angleDeg = (angle * 180) / Math.PI + 90;
-
-      return { cx, cy, angle, angleDeg, width, height, ring };
-    }
-
     function clampPosition(left, top, width, height){
       const maxLeft = Math.max(LABEL_PADDING, stadium.clientWidth - width - LABEL_PADDING);
       const maxTop = Math.max(LABEL_PADDING, stadium.clientHeight - height - LABEL_PADDING);
@@ -866,26 +813,18 @@
       };
     }
 
-    function getCandidatePositions(layout, width, height){
-      const radialX = Math.cos(layout.angle);
-      const radialY = Math.sin(layout.angle);
-      const tangentX = -radialY;
-      const tangentY = radialX;
-      const outwardDistance = layout.height / 2 + height / 2 + 12;
-      const inwardDistance = layout.height / 2 + height / 2 + 10;
-
-      const outwardX = layout.cx + radialX * outwardDistance;
-      const outwardY = layout.cy + radialY * outwardDistance;
-      const inwardX = layout.cx - radialX * inwardDistance;
-      const inwardY = layout.cy - radialY * inwardDistance;
-
+    function getCandidatePositions(sec, width, height){
+      const cx = sec.x + sec.w / 2;
+      const cy = sec.y + sec.h / 2;
       return [
-        { left: outwardX - width / 2, top: outwardY - height / 2 },
-        { left: outwardX + tangentX * 18 - width / 2, top: outwardY + tangentY * 18 - height / 2 },
-        { left: outwardX - tangentX * 18 - width / 2, top: outwardY - tangentY * 18 - height / 2 },
-        { left: inwardX - width / 2, top: inwardY - height / 2 },
-        { left: inwardX + tangentX * 16 - width / 2, top: inwardY + tangentY * 16 - height / 2 },
-        { left: inwardX - tangentX * 16 - width / 2, top: inwardY - tangentY * 16 - height / 2 }
+        { left: cx - width / 2, top: sec.y - height - 6 },
+        { left: cx - width / 2, top: sec.y + sec.h + 6 },
+        { left: sec.x + sec.w + 8, top: cy - height / 2 },
+        { left: sec.x - width - 8, top: cy - height / 2 },
+        { left: sec.x + sec.w + 8, top: sec.y - height - 4 },
+        { left: sec.x - width - 8, top: sec.y - height - 4 },
+        { left: sec.x + sec.w + 8, top: sec.y + sec.h + 4 },
+        { left: sec.x - width - 8, top: sec.y + sec.h + 4 }
       ];
     }
 
@@ -921,31 +860,89 @@
       return tag;
     }
 
+    function assignPricesByRank(targetItems, pricePool, key){
+      const filtered = targetItems.filter((item) => Number(item[key]) > 0);
+      if (filtered.length === 0 || pricePool.length === 0) return;
+
+      const sortedTargets = [...filtered].sort((a, b) => a[key] - b[key]);
+      const sortedPool = [...pricePool].sort((a, b) => a - b);
+      const lastIndex = sortedPool.length - 1;
+
+      sortedTargets.forEach((item, index) => {
+        const ratio = sortedTargets.length === 1 ? 0 : index / (sortedTargets.length - 1);
+        const poolIndex = Math.round(ratio * lastIndex);
+        item[key] = sortedPool[poolIndex];
+      });
+    }
+
+    function extractViagogoPrices(html){
+      const prices = [];
+      const addPrice = (value) => {
+        const parsed = Number(String(value).replace(/[^0-9.]/g, ""));
+        if (!Number.isNaN(parsed) && parsed >= 500 && parsed <= 3000000) {
+          prices.push(Math.round(parsed));
+        }
+      };
+
+      const inrMatches = html.match(/INR\s?[0-9,]+/gi) || [];
+      inrMatches.forEach((text) => addPrice(text));
+
+      const minPriceMatches = html.match(/\"minPrice\"\s*:\s*\"?[0-9.]+\"?/gi) || [];
+      minPriceMatches.forEach((text) => addPrice(text));
+
+      const unique = [...new Set(prices)];
+      return unique.sort((a, b) => a - b);
+    }
+
+    function applyLivePrices(pricePool){
+      if (!pricePool || pricePool.length === 0) return false;
+      assignPricesByRank(match.sections, pricePool, "price");
+      assignPricesByRank(match.listings, pricePool, "price");
+      return true;
+    }
+
+    async function fetchViagogoPrices(){
+      for (const url of VIAGOGO_SOURCE_URLS) {
+        try {
+          const response = await fetch(url, { method: "GET", mode: "cors", cache: "no-store" });
+          if (!response.ok) throw new Error(`viagogo status ${response.status}`);
+          const html = await response.text();
+          if (!html || html.length < 3000) throw new Error("viagogo returned empty content");
+
+          const prices = extractViagogoPrices(html);
+          const applied = applyLivePrices(prices);
+          if (applied) {
+            showingText.textContent = `Showing ${match.displayedCount} of ${match.totalCount} | Live prices synced`;
+            buildSections();
+            renderCards();
+            return;
+          }
+        } catch (error) {
+          console.warn(`Price sync attempt failed for ${url}:`, error);
+        }
+      }
+      console.warn("Using static fallback prices.");
+    }
+
     function buildSections(){
       blocksLayer.innerHTML = "";
       labelsLayer.innerHTML = "";
-      sectionLayout.clear();
       const candidates = [];
 
       match.sections.forEach(sec=>{
-        const layout = computeSectionLayout(sec);
-        sectionLayout.set(sec.id, layout);
-
         const block = document.createElement("div");
         block.className = "seat-block";
         if(sec.tiny) block.classList.add("tiny");
         if(sec.mini) block.classList.add("mini");
         if(sec.group === "few") block.classList.add("low");
         if(sec.group === "sold") block.classList.add("sold");
-        if(layout.ring === "inner") block.classList.add("ring-inner");
-        if(layout.ring === "inner-core") block.classList.add("ring-inner-core");
         if(activeSection === sec.id) block.classList.add("active");
 
-        block.style.left = `${layout.cx}px`;
-        block.style.top = `${layout.cy}px`;
-        block.style.width = `${layout.width}px`;
-        block.style.height = `${layout.height}px`;
-        block.style.transform = `translate(-50%, -50%) rotate(${layout.angleDeg}deg)`;
+        block.style.left = sec.x + "px";
+        block.style.top = sec.y + "px";
+        block.style.width = sec.w + "px";
+        block.style.height = sec.h + "px";
+        block.style.transform = "";
         block.textContent = sec.id.replace(/[0-9]/g, "") || sec.id;
 
         block.addEventListener("click", ()=>{
@@ -975,14 +972,11 @@
 
       const placedRects = [];
       labelSections.forEach((sec) => {
-        const layout = sectionLayout.get(sec.id);
-        if (!layout) return;
-
         const tag = createPriceTag(sec);
         labelsLayer.appendChild(tag);
         const width = tag.offsetWidth;
         const height = tag.offsetHeight;
-        const positions = getCandidatePositions(layout, width, height);
+        const positions = getCandidatePositions(sec, width, height);
 
         let placed = null;
         for (const pos of positions) {
@@ -1001,7 +995,7 @@
         }
 
         if (!placed && activeSection === sec.id) {
-          const fallback = clampPosition(layout.cx - width / 2, layout.cy - layout.height - height - 10, width, height);
+          const fallback = clampPosition(sec.x + sec.w / 2 - width / 2, sec.y - height - 6, width, height);
           placed = {
             ...fallback,
             rect: {
@@ -1129,6 +1123,7 @@
 
     buildSections();
     renderCards();
+    fetchViagogoPrices();
   </script>
 </body>
 </html>
