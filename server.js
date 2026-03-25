@@ -5,7 +5,7 @@ const path = require("path");
 
 const dotenv = require("dotenv");
 const express = require("express");
-const Razorpay = require("razorpay");
+const { encrypt: sabpaisaEncrypt, decrypt: sabpaisaDecrypt } = require("sabpaisa-encryption-package-gcm");
 
 const { getAllMatches, getMatchBySlug } = require("./data/matches");
 
@@ -13,29 +13,38 @@ dotenv.config();
 
 const app = express();
 
-const PORT = normalizeInteger(process.env.PORT, 3000, { min: 1, max: 65535 });
+const PORT = toInt(process.env.PORT, 3000, { min: 1, max: 65535 });
 const CURRENCY = "INR";
 const ORDER_TTL_MS = 30 * 60 * 1000;
-const CHECKOUT_PROVIDER = asString(process.env.CHECKOUT_PROVIDER || "razorpay").toLowerCase();
-const RAZORPAY_KEY_ID = asString(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID);
-const RAZORPAY_KEY_SECRET = asString(process.env.RAZORPAY_KEY_SECRET);
-const MATCH_STATUS_PROVIDER = asString(process.env.MATCH_STATUS_PROVIDER || "fallback");
-const LIVE_REFRESH_INTERVAL_MS = normalizeInteger(process.env.MATCH_STATUS_REFRESH_MS, 20000, {
+const LIVE_REFRESH_INTERVAL_MS = toInt(process.env.MATCH_STATUS_REFRESH_MS, 20000, {
   min: 5000,
   max: 120000
 });
+const MATCH_STATUS_PROVIDER = asString(process.env.MATCH_STATUS_PROVIDER || "fallback");
+const CHECKOUT_PROVIDER = asString(process.env.CHECKOUT_PROVIDER || "sabpaisa").toLowerCase();
 
-const razorpayClient =
-  RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET
-    ? new Razorpay({
-        key_id: RAZORPAY_KEY_ID,
-        key_secret: RAZORPAY_KEY_SECRET
-      })
-    : null;
+const SABPAISA_CLIENT_CODE = asString(process.env.SABPAISA_CLIENT_CODE);
+const SABPAISA_TRANS_USER_NAME = asString(process.env.SABPAISA_TRANS_USER_NAME);
+const SABPAISA_TRANS_USER_PASSWORD = asString(process.env.SABPAISA_TRANS_USER_PASSWORD);
+const SABPAISA_AUTH_KEY = asString(process.env.SABPAISA_AUTH_KEY);
+const SABPAISA_AUTH_IV = asString(process.env.SABPAISA_AUTH_IV);
+const SABPAISA_ENV = asString(process.env.SABPAISA_ENV || "stag").toLowerCase();
+const SABPAISA_CALLBACK_BASE_URL = asString(process.env.SABPAISA_CALLBACK_BASE_URL);
+const SABPAISA_CHANNEL_ID = asString(process.env.SABPAISA_CHANNEL_ID || "web");
 
-const orderStore = new Map();
+const isSabpaisaConfigured = Boolean(
+  SABPAISA_CLIENT_CODE &&
+    SABPAISA_TRANS_USER_NAME &&
+    SABPAISA_TRANS_USER_PASSWORD &&
+    SABPAISA_AUTH_KEY &&
+    SABPAISA_AUTH_IV
+);
+
+const soldStateBySection = new Map();
+const pendingOrders = new Map();
 
 app.disable("x-powered-by");
+app.set("trust proxy", true);
 app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: false }));
 app.use("/public", express.static(path.join(__dirname, "public"), { dotfiles: "ignore" }));
@@ -58,123 +67,137 @@ function asString(value) {
   return String(value ?? "").trim();
 }
 
-function normalizeInteger(value, fallback, options = {}) {
+function toInt(value, fallback, options = {}) {
   const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-  if (options.min != null && parsed < options.min) {
-    return options.min;
-  }
-  if (options.max != null && parsed > options.max) {
-    return options.max;
-  }
+  if (!Number.isFinite(parsed)) return fallback;
+  if (options.min != null && parsed < options.min) return options.min;
+  if (options.max != null && parsed > options.max) return options.max;
   return parsed;
 }
 
-function nowIso() {
-  return new Date().toISOString();
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function sectionKey(matchSlug, sectionId) {
+  return `${matchSlug}::${sectionId}`;
 }
 
 function randomId(length = 8) {
   return crypto.randomBytes(Math.ceil(length / 2)).toString("hex").slice(0, length);
 }
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
 function createOrderReference() {
-  return `ord_${Date.now()}_${randomId(10)}`;
+  return `SP${Date.now().toString(36).toUpperCase()}${randomId(6).toUpperCase()}`;
 }
 
 function createBookingId() {
   return `IPL-${Date.now().toString(36).toUpperCase()}-${randomId(6).toUpperCase()}`;
 }
 
-function safeSignatureEquals(left, right) {
-  const leftBuffer = Buffer.from(String(left || ""), "utf8");
-  const rightBuffer = Buffer.from(String(right || ""), "utf8");
-  if (leftBuffer.length !== rightBuffer.length) return false;
-  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+function normalizeBaseUrl(baseUrl) {
+  return asString(baseUrl).replace(/\/+$/, "");
 }
 
-function validateBuyer(buyer) {
-  const sanitized = {
-    name: asString(buyer?.name),
-    email: asString(buyer?.email).toLowerCase(),
-    phone: asString(buyer?.phone)
-  };
-
-  const errors = [];
-  if (!sanitized.name || sanitized.name.length < 2) {
-    errors.push("buyer.name is required.");
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitized.email)) {
-    errors.push("buyer.email must be valid.");
-  }
-  if (!/^[0-9+\-\s]{8,15}$/.test(sanitized.phone)) {
-    errors.push("buyer.phone must be valid.");
+function getPublicBaseUrl(req) {
+  if (SABPAISA_CALLBACK_BASE_URL) {
+    return normalizeBaseUrl(SABPAISA_CALLBACK_BASE_URL);
   }
 
-  return { buyer: sanitized, errors };
+  const forwardedProto = asString(req.headers["x-forwarded-proto"]).split(",")[0].trim();
+  const forwardedHost = asString(req.headers["x-forwarded-host"]).split(",")[0].trim();
+  const protocol = forwardedProto || req.protocol || "http";
+  const host = forwardedHost || req.get("host") || `localhost:${PORT}`;
+  return `${protocol}://${host}`;
+}
+
+function getSabpaisaGatewayUrl(env) {
+  if (env === "prod" || env === "production" || env === "live") {
+    return "https://securepay.sabpaisa.in/SabPaisa/sabPaisaInit?v=1";
+  }
+  if (env === "uat") {
+    return "https://secure.sabpaisa.in/SabPaisa/sabPaisaInit?v=1";
+  }
+  return "https://stage-securepay.sabpaisa.in/SabPaisa/sabPaisaInit?v=1";
+}
+
+function initializeSoldState() {
+  for (const match of getAllMatches()) {
+    for (const section of match.sections) {
+      soldStateBySection.set(sectionKey(match.slug, section.id), section.baseSold);
+    }
+  }
 }
 
 function getMatchPhase(dateTime) {
-  const start = new Date(dateTime).getTime();
-  const now = Date.now();
-  const end = start + 4 * 60 * 60 * 1000;
+  const startMs = new Date(dateTime).getTime();
+  const nowMs = Date.now();
+  const endMs = startMs + 4 * 60 * 60 * 1000;
 
-  if (now < start) {
+  if (Number.isNaN(startMs) || nowMs < startMs) {
     return { matchPhase: "Upcoming", matchStatusText: "Scheduled" };
   }
-  if (now >= start && now <= end) {
-    return { matchPhase: "Running", matchStatusText: "Live now" };
+  if (nowMs <= endMs) {
+    return { matchPhase: "Running", matchStatusText: "In Progress" };
   }
   return { matchPhase: "Completed", matchStatusText: "Match ended" };
 }
 
 function getSectionStatus(available, capacity) {
   if (available <= 0) return "Sold Out";
-  if (available <= Math.max(25, Math.round(capacity * 0.1))) return "Almost Gone";
+  if (available <= Math.max(20, Math.round(capacity * 0.1))) return "Almost Gone";
   if (available <= Math.round(capacity * 0.25)) return "Limited";
   return "Available";
 }
 
-function getMatchInventoryStatus(seatsLeft, totalCapacity) {
+function getMatchStatus(seatsLeft, totalCapacity) {
   if (seatsLeft <= 0) return "Sold Out";
-  if (seatsLeft <= Math.max(100, Math.round(totalCapacity * 0.1))) return "Almost Gone";
+  if (seatsLeft <= Math.max(80, Math.round(totalCapacity * 0.12))) return "Almost Gone";
   if (seatsLeft <= Math.round(totalCapacity * 0.3)) return "Limited";
   return "Live";
 }
 
-function getDynamicPrice(basePrice, capacity, available) {
-  const soldRatio = capacity <= 0 ? 1 : (capacity - available) / capacity;
-  const surgeMultiplier = 1 + Math.max(0, soldRatio - 0.55) * 0.45;
-  return Math.max(100, Math.round((basePrice * surgeMultiplier) / 10) * 10);
+function getDynamicPrice(basePrice, capacity, sold) {
+  const soldRatio = capacity <= 0 ? 1 : sold / capacity;
+  let multiplier = 1;
+  if (soldRatio > 0.9) multiplier = 1.25;
+  else if (soldRatio > 0.8) multiplier = 1.16;
+  else if (soldRatio > 0.65) multiplier = 1.1;
+  return Math.max(100, Math.round((basePrice * multiplier) / 10) * 10);
 }
 
 function hydrateMatch(rawMatch) {
   const sections = rawMatch.sections.map((section) => {
-    const available = Math.max(0, section.capacity - section.baseSold);
-    const dynamicPrice = getDynamicPrice(section.price, section.capacity, available);
+    const key = sectionKey(rawMatch.slug, section.id);
+    const sold = soldStateBySection.get(key) ?? section.baseSold;
+    const available = Math.max(0, section.capacity - sold);
     return {
       ...section,
+      sold,
       available,
-      dynamicPrice,
+      dynamicPrice: getDynamicPrice(section.price, section.capacity, sold),
       status: getSectionStatus(available, section.capacity)
     };
   });
 
   const seatsLeft = sections.reduce((sum, section) => sum + section.available, 0);
   const totalCapacity = sections.reduce((sum, section) => sum + section.capacity, 0);
-  const startingPrice = Math.min(...sections.map((section) => section.dynamicPrice));
+  const activePrices = sections.filter((section) => section.available > 0).map((section) => section.dynamicPrice);
   const phase = getMatchPhase(rawMatch.dateTime);
 
   return {
     ...rawMatch,
     sections,
     seatsLeft,
-    startingPrice,
-    status: getMatchInventoryStatus(seatsLeft, totalCapacity),
+    startingPrice: activePrices.length ? Math.min(...activePrices) : null,
+    status: getMatchStatus(seatsLeft, totalCapacity),
     matchPhase: phase.matchPhase,
     matchStatusText: phase.matchStatusText,
+    matchStatusSource: MATCH_STATUS_PROVIDER,
     refreshedAt: nowIso()
   };
 }
@@ -199,47 +222,127 @@ function calculatePricing(unitPrice, quantity) {
   const platformFee = Math.round(subtotal * 0.04);
   const gst = Math.round((subtotal + platformFee) * 0.18);
   const total = subtotal + platformFee + gst;
-  return { subtotal, platformFee, gst, total };
+  return { unitPrice, quantity, subtotal, platformFee, gst, total, currency: CURRENCY };
 }
 
-function resolveCheckoutMode() {
-  if (CHECKOUT_PROVIDER === "razorpay") {
-    if (razorpayClient) return { mode: "razorpay" };
-    return { mode: "demo", fallbackFrom: "razorpay" };
-  }
+function validateBuyer(buyer) {
+  const normalized = {
+    name: asString(buyer?.name),
+    email: asString(buyer?.email).toLowerCase(),
+    phone: asString(buyer?.phone)
+  };
 
-  if (CHECKOUT_PROVIDER === "demo") {
-    return { mode: "demo" };
-  }
+  const errors = [];
+  if (!normalized.name || normalized.name.length < 2) errors.push("buyer.name is required.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.email)) errors.push("buyer.email must be valid.");
+  if (!/^[0-9+\-\s]{8,15}$/.test(normalized.phone)) errors.push("buyer.phone must be valid.");
 
-  return { mode: "demo", fallbackFrom: CHECKOUT_PROVIDER };
+  return { buyer: normalized, errors };
 }
 
-function buildBookingResponse(orderRecord, paymentId) {
+function cleanupPendingOrders() {
+  const now = Date.now();
+  for (const [orderReference, order] of pendingOrders.entries()) {
+    if (now - order.createdAt > ORDER_TTL_MS) {
+      pendingOrders.delete(orderReference);
+    }
+  }
+}
+
+function finalizeOrder(orderReference) {
+  const pending = pendingOrders.get(orderReference);
+  if (!pending) {
+    return { ok: false, statusCode: 404, error: "Order reference not found or expired." };
+  }
+
+  const sourceMatch = getMatchBySlug(pending.matchSlug);
+  if (!sourceMatch) {
+    pendingOrders.delete(orderReference);
+    return { ok: false, statusCode: 404, error: "Match no longer available." };
+  }
+
+  const sourceSection = sourceMatch.sections.find((section) => section.id === pending.sectionId);
+  if (!sourceSection) {
+    pendingOrders.delete(orderReference);
+    return { ok: false, statusCode: 404, error: "Section no longer available." };
+  }
+
+  const key = sectionKey(pending.matchSlug, pending.sectionId);
+  const sold = soldStateBySection.get(key) ?? sourceSection.baseSold;
+  const available = sourceSection.capacity - sold;
+  if (available < pending.quantity) {
+    pendingOrders.delete(orderReference);
+    return {
+      ok: false,
+      statusCode: 409,
+      error: `Only ${Math.max(0, available)} ticket(s) are available now.`
+    };
+  }
+
+  soldStateBySection.set(key, clamp(sold + pending.quantity, 0, sourceSection.capacity));
+  pendingOrders.delete(orderReference);
+
   return {
-    success: true,
+    ok: true,
     booking: {
       bookingId: createBookingId(),
-      orderReference: orderRecord.orderReference,
-      paymentId,
-      provider: orderRecord.mode,
-      matchSlug: orderRecord.match.slug,
-      sectionId: orderRecord.section.id,
-      quantity: orderRecord.quantity,
-      amount: orderRecord.amount,
-      currency: orderRecord.currency,
-      buyer: orderRecord.buyer,
-      confirmedAt: nowIso()
-    }
+      orderReference,
+      paymentId: pending.paymentId || null,
+      provider: "sabpaisa",
+      quantity: pending.quantity,
+      amountPaid: pending.pricing.total,
+      currency: pending.pricing.currency,
+      matchSlug: pending.matchSlug,
+      sectionId: pending.sectionId,
+      purchasedAt: nowIso()
+    },
+    pending,
+    match: sourceMatch,
+    section: sourceSection
   };
 }
 
+function buildThankYouParams(finalized) {
+  const matchStart = new Date(finalized.match.dateTime);
+  const validDate = Number.isFinite(matchStart.getTime());
+
+  const dateLabel = validDate
+    ? new Intl.DateTimeFormat("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      }).format(matchStart)
+    : "Match Day";
+
+  const timeLabel = validDate
+    ? new Intl.DateTimeFormat("en-IN", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true
+      }).format(matchStart)
+    : "TBA";
+
+  return new URLSearchParams({
+    id: finalized.booking.bookingId,
+    match: `${finalized.match.homeTeam} vs ${finalized.match.awayTeam}`,
+    date: dateLabel,
+    time: timeLabel,
+    city: finalized.match.city,
+    stadium: finalized.match.stadium,
+    seats: `${finalized.pending.quantity} x ${finalized.section.label}`,
+    name: finalized.pending.buyer.name,
+    email: finalized.pending.buyer.email,
+    total: String(finalized.booking.amountPaid)
+  });
+}
+
 app.get("/api/config", (req, res) => {
-  const runtimeCheckout = resolveCheckoutMode();
   res.json({
-    checkoutProvider: runtimeCheckout.mode,
-    checkoutFallbackFrom: runtimeCheckout.fallbackFrom || null,
-    razorpayKeyId: RAZORPAY_KEY_ID || null,
+    checkoutProvider: "sabpaisa",
+    checkoutFallbackFrom: null,
+    razorpayKeyId: null,
+    sabpaisaEnv: SABPAISA_ENV,
+    sabpaisaEnabled: isSabpaisaConfigured,
     liveRefreshIntervalMs: LIVE_REFRESH_INTERVAL_MS,
     matchStatusProvider: MATCH_STATUS_PROVIDER,
     currency: CURRENCY
@@ -248,27 +351,36 @@ app.get("/api/config", (req, res) => {
 
 app.get("/api/matches", (req, res) => {
   const matches = getHydratedMatches().map((match) => toMatchSummary(match));
-  res.json({ matches });
+  res.json({
+    refreshedAt: nowIso(),
+    matchStatusSource: MATCH_STATUS_PROVIDER,
+    matches
+  });
 });
 
 app.get("/api/matches/:slug", (req, res, next) => {
   const match = getHydratedMatch(req.params.slug);
-  if (!match) {
-    return next(new HttpError(404, "Match not found."));
-  }
+  if (!match) return next(new HttpError(404, "Match not found."));
   res.json({ match });
 });
 
 app.post(
   "/api/checkout/create-order",
   asyncHandler(async (req, res) => {
+    if (CHECKOUT_PROVIDER !== "sabpaisa") {
+      throw new HttpError(503, "Only SabPaisa checkout is enabled on this server.");
+    }
+
+    if (!isSabpaisaConfigured) {
+      throw new HttpError(500, "SabPaisa credentials are missing in environment variables.");
+    }
+
     const matchSlug = asString(req.body?.matchSlug);
     const sectionId = asString(req.body?.sectionId);
     const quantity = Number.parseInt(req.body?.quantity, 10);
     const { buyer, errors: buyerErrors } = validateBuyer(req.body?.buyer);
 
     const validationErrors = [...buyerErrors];
-
     if (!matchSlug) validationErrors.push("matchSlug is required.");
     if (!sectionId) validationErrors.push("sectionId is required.");
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 8) {
@@ -280,174 +392,171 @@ app.post(
     }
 
     const match = getHydratedMatch(matchSlug);
-    if (!match) {
-      throw new HttpError(404, "Match not found.");
-    }
+    if (!match) throw new HttpError(404, "Match not found.");
 
     const section = match.sections.find((item) => item.id === sectionId);
-    if (!section) {
-      throw new HttpError(404, "Section not found.");
-    }
+    if (!section) throw new HttpError(404, "Section not found.");
 
     if (section.available < quantity) {
-      throw new HttpError(409, "Not enough seats available for selected section.");
+      throw new HttpError(409, `Only ${section.available} ticket(s) are available for this section.`);
     }
 
     const pricing = calculatePricing(section.dynamicPrice, quantity);
     const orderReference = createOrderReference();
-    const runtimeCheckout = resolveCheckoutMode();
+    const callbackUrl = `${getPublicBaseUrl(req)}/api/checkout/sabpaisa/response`;
+    const gatewayPayload = new URLSearchParams({
+      payerName: buyer.name,
+      payerEmail: buyer.email,
+      payerMobile: buyer.phone,
+      clientTxnId: orderReference,
+      amount: pricing.total.toFixed(2),
+      amountType: pricing.currency,
+      clientCode: SABPAISA_CLIENT_CODE,
+      transUserName: SABPAISA_TRANS_USER_NAME,
+      transUserPassword: SABPAISA_TRANS_USER_PASSWORD,
+      callbackUrl,
+      channelId: SABPAISA_CHANNEL_ID,
+      udf1: match.slug,
+      udf2: section.id,
+      udf3: String(quantity),
+      udf4: String(section.dynamicPrice)
+    }).toString();
 
-    const baseResponse = {
-      mode: runtimeCheckout.mode,
+    let encData;
+    try {
+      encData = sabpaisaEncrypt(gatewayPayload, SABPAISA_AUTH_KEY, SABPAISA_AUTH_IV);
+    } catch (error) {
+      throw new HttpError(502, "Unable to initiate SabPaisa checkout.");
+    }
+
+    pendingOrders.set(orderReference, {
+      mode: "sabpaisa",
+      orderReference,
+      matchSlug: match.slug,
+      sectionId: section.id,
+      quantity,
+      buyer,
+      pricing,
+      createdAt: Date.now(),
+      paymentId: null
+    });
+
+    res.status(201).json({
+      mode: "sabpaisa",
       orderReference,
       match: {
         slug: match.slug,
         homeTeam: match.homeTeam,
-        awayTeam: match.awayTeam
+        awayTeam: match.awayTeam,
+        dateTime: match.dateTime,
+        stadium: match.stadium,
+        city: match.city
       },
       section: {
         id: section.id,
-        label: section.label
+        label: section.label,
+        stand: section.stand,
+        selectedUnitPrice: section.dynamicPrice
       },
       quantity,
-      pricing: {
-        ...pricing,
-        currency: CURRENCY
+      pricing,
+      sabpaisa: {
+        gatewayUrl: getSabpaisaGatewayUrl(SABPAISA_ENV),
+        clientCode: SABPAISA_CLIENT_CODE,
+        encData
       }
-    };
-
-    if (runtimeCheckout.mode === "razorpay") {
-      const amountInPaise = pricing.total * 100;
-
-      let razorpayOrder;
-      try {
-        razorpayOrder = await razorpayClient.orders.create({
-          amount: amountInPaise,
-          currency: CURRENCY,
-          receipt: orderReference.slice(0, 40),
-          notes: {
-            orderReference,
-            matchSlug: match.slug,
-            sectionId: section.id,
-            quantity: String(quantity),
-            buyerEmail: buyer.email
-          }
-        });
-      } catch (error) {
-        throw new HttpError(502, "Failed to create Razorpay order.");
-      }
-
-      orderStore.set(orderReference, {
-        mode: "razorpay",
-        orderReference,
-        razorpayOrderId: razorpayOrder.id,
-        amount: amountInPaise,
-        currency: CURRENCY,
-        createdAt: Date.now(),
-        buyer,
-        quantity,
-        match: {
-          slug: match.slug
-        },
-        section: {
-          id: section.id
-        }
-      });
-
-      return res.status(201).json({
-        ...baseResponse,
-        razorpay: {
-          keyId: RAZORPAY_KEY_ID,
-          orderId: razorpayOrder.id,
-          amount: razorpayOrder.amount,
-          currency: razorpayOrder.currency
-        }
-      });
-    }
-
-    orderStore.set(orderReference, {
-      mode: "demo",
-      orderReference,
-      amount: pricing.total * 100,
-      currency: CURRENCY,
-      createdAt: Date.now(),
-      buyer,
-      quantity,
-      match: {
-        slug: match.slug
-      },
-      section: {
-        id: section.id
-      }
-    });
-
-    return res.status(201).json({
-      ...baseResponse,
-      ...(runtimeCheckout.fallbackFrom
-        ? {
-            fallback: {
-              from: runtimeCheckout.fallbackFrom,
-              to: "demo"
-            }
-          }
-        : {})
     });
   })
 );
 
-app.post(
-  "/api/checkout/verify",
-  asyncHandler(async (req, res) => {
-    const orderReference = asString(req.body?.orderReference);
-    if (!orderReference) {
-      throw new HttpError(400, "orderReference is required.");
-    }
+app.all("/api/checkout/sabpaisa/response", (req, res) => {
+  const redirectFailure = (reason) => {
+    const params = new URLSearchParams({
+      payment: "failed",
+      reason: asString(reason || "Payment failed.")
+    });
+    res.redirect(`/?${params.toString()}`);
+  };
 
-    const orderRecord = orderStore.get(orderReference);
-    if (!orderRecord) {
-      throw new HttpError(404, "Order reference not found or expired.");
-    }
+  if (!isSabpaisaConfigured) {
+    redirectFailure("SabPaisa is not configured on this server.");
+    return;
+  }
 
-    if (Date.now() - orderRecord.createdAt > ORDER_TTL_MS) {
-      orderStore.delete(orderReference);
-      throw new HttpError(410, "Order reference has expired.");
-    }
+  const encResponseRaw =
+    req.query?.encResponse ||
+    req.query?.responseQuery ||
+    req.body?.encResponse ||
+    req.body?.responseQuery ||
+    req.body?.encData ||
+    "";
 
-    if (orderRecord.mode === "razorpay") {
-      const razorpayOrderId = asString(req.body?.razorpay_order_id);
-      const razorpayPaymentId = asString(req.body?.razorpay_payment_id);
-      const razorpaySignature = asString(req.body?.razorpay_signature);
+  const encResponse = asString(encResponseRaw).replace(/ /g, "+");
+  if (!encResponse) {
+    redirectFailure("Missing SabPaisa response payload.");
+    return;
+  }
 
-      if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
-        throw new HttpError(400, "Razorpay verification fields are required.");
-      }
+  let payload;
+  try {
+    const decrypted = sabpaisaDecrypt(encResponse, SABPAISA_AUTH_KEY, SABPAISA_AUTH_IV);
+    payload = Object.fromEntries(new URLSearchParams(String(decrypted || "")).entries());
+  } catch (error) {
+    redirectFailure("Unable to verify SabPaisa response.");
+    return;
+  }
 
-      if (razorpayOrderId !== orderRecord.razorpayOrderId) {
-        throw new HttpError(400, "Razorpay order id does not match.");
-      }
+  const orderReference = asString(
+    payload?.clientTxnId || payload?.order_id || payload?.orderReference
+  );
+  if (!orderReference) {
+    redirectFailure("Missing order id in gateway response.");
+    return;
+  }
 
-      const expectedSignature = crypto
-        .createHmac("sha256", RAZORPAY_KEY_SECRET)
-        .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-        .digest("hex");
+  const pending = pendingOrders.get(orderReference);
+  if (!pending || pending.mode !== "sabpaisa") {
+    redirectFailure("Order session expired. Please retry checkout.");
+    return;
+  }
 
-      if (!safeSignatureEquals(expectedSignature, razorpaySignature)) {
-        throw new HttpError(400, "Invalid payment signature.");
-      }
+  const status = asString(payload?.status || payload?.Status || payload?.order_status).toLowerCase();
+  const respCode = asString(payload?.sabPaisaRespCode || payload?.respCode);
+  const success =
+    status === "success" ||
+    status === "successful" ||
+    (respCode === "0000" && status !== "failure" && status !== "failed");
 
-      orderStore.delete(orderReference);
-      return res.json(buildBookingResponse(orderRecord, razorpayPaymentId));
-    }
+  if (!success) {
+    pendingOrders.delete(orderReference);
+    redirectFailure(`Payment ${status || "failed"}.`);
+    return;
+  }
 
-    const demoTransactionId = asString(req.body?.demoTransactionId);
-    if (!demoTransactionId) {
-      throw new HttpError(400, "demoTransactionId is required for demo checkout.");
-    }
+  const paidAmount = Number(payload?.paidAmount || payload?.amount || payload?.Amount || 0);
+  if (!Number.isFinite(paidAmount) || Math.abs(paidAmount - pending.pricing.total) > 0.01) {
+    pendingOrders.delete(orderReference);
+    redirectFailure("Amount mismatch in gateway response.");
+    return;
+  }
 
-    orderStore.delete(orderReference);
-    return res.json(buildBookingResponse(orderRecord, demoTransactionId));
-  })
-);
+  pending.paymentId = asString(payload?.txnId || payload?.transactionId || payload?.bankTxnId || "");
+
+  const finalized = finalizeOrder(orderReference);
+  if (!finalized.ok) {
+    redirectFailure(finalized.error);
+    return;
+  }
+
+  const params = buildThankYouParams(finalized);
+  res.redirect(`/thankyou.html?${params.toString()}`);
+});
+
+app.post("/api/checkout/verify", (req, res) => {
+  res.status(409).json({
+    error: "SabPaisa payments are verified only through /api/checkout/sabpaisa/response callback."
+  });
+});
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
@@ -475,30 +584,26 @@ app.use((error, req, res, next) => {
   }
 
   const statusCode = error instanceof HttpError ? error.statusCode : 500;
-  const message =
-    error instanceof HttpError ? error.message : "Unexpected server error.";
-  const payload = { error: message };
+  const payload = {
+    error: error instanceof HttpError ? error.message : "Unexpected server error."
+  };
 
   if (error instanceof HttpError && Array.isArray(error.details) && error.details.length > 0) {
     payload.details = error.details;
   }
 
-  if (process.env.NODE_ENV !== "production" && !(error instanceof HttpError)) {
+  if (!(error instanceof HttpError) && process.env.NODE_ENV !== "production") {
     payload.debug = error.message;
   }
 
   res.status(statusCode).json(payload);
 });
 
-setInterval(() => {
-  const now = Date.now();
-  for (const [orderReference, order] of orderStore.entries()) {
-    if (now - order.createdAt > ORDER_TTL_MS) {
-      orderStore.delete(orderReference);
-    }
-  }
-}, 5 * 60 * 1000).unref();
+initializeSoldState();
+setInterval(cleanupPendingOrders, 60_000).unref();
 
 app.listen(PORT, () => {
-  console.log(`[server] running on http://localhost:${PORT}`);
+  console.log(
+    `[server] running on http://localhost:${PORT} | checkout=sabpaisa | env=${SABPAISA_ENV} | configured=${isSabpaisaConfigured}`
+  );
 });
