@@ -47,6 +47,32 @@ function toFlexibleInteger(value) {
   return Number.parseInt(normalized, 10);
 }
 
+function getBase64ByteLength(value) {
+  const normalized = asString(value);
+  if (!normalized || /[^A-Za-z0-9+/=]/.test(normalized) || normalized.length % 4 !== 0) {
+    return null;
+  }
+
+  try {
+    const bytes = Uint8Array.from(Buffer.from(normalized, "base64"));
+    if (!bytes.length) {
+      return null;
+    }
+    return bytes.length;
+  } catch {
+    return null;
+  }
+}
+
+function getSabpaisaCryptoMeta(config) {
+  return {
+    authKeyLength: asString(config.authKey).length,
+    authKeyBytes: getBase64ByteLength(config.authKey),
+    authIvLength: asString(config.authIv).length,
+    authIvBytes: getBase64ByteLength(config.authIv)
+  };
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -346,6 +372,22 @@ function validateGatewayUrl(errors, config) {
   }
 }
 
+function validateSabpaisaCryptoConfig(errors, config) {
+  const cryptoMeta = getSabpaisaCryptoMeta(config);
+
+  if (config.authKey && cryptoMeta.authKeyBytes == null) {
+    errors.push("SABPAISA_KEY must be valid base64.");
+  } else if (config.authKey && cryptoMeta.authKeyBytes !== 32) {
+    errors.push("SABPAISA_KEY must decode to 32 bytes.");
+  }
+
+  if (config.authIv && cryptoMeta.authIvBytes == null) {
+    errors.push("SABPAISA_IV must be valid base64.");
+  } else if (config.authIv && cryptoMeta.authIvBytes !== 48) {
+    errors.push("SABPAISA_IV must decode to 48 bytes.");
+  }
+}
+
 function getSabpaisaConfig(env, request) {
   const environment = asString(env.SABPAISA_ENV || "stag").toLowerCase();
   const requestOrigin = getRequestOrigin(request);
@@ -422,11 +464,13 @@ function validateSabpaisaConfig(config, checkoutProvider) {
   if (!config.transUserName) errors.push("SABPAISA_USERNAME is required.");
   if (!config.transUserPassword) errors.push("SABPAISA_PASSWORD is required.");
   if (!config.authKey) errors.push("SABPAISA_KEY is required.");
-  if (!config.authIv) errors.push("SABPAISA_AUTH_IV is required.");
+  if (!config.authIv) errors.push("SABPAISA_IV is required.");
   if (!config.urls.appBaseUrl) {
     errors.push("APP_BASE_URL is required when SabPaisa checkout is enabled.");
     return errors;
   }
+
+  validateSabpaisaCryptoConfig(errors, config);
 
   const appBaseUrl = parseUrlOrNull(config.urls.appBaseUrl);
   if (!appBaseUrl) {
@@ -732,6 +776,7 @@ export default {
           razorpayKeyId: null,
           sabpaisaEnv: sabpaisaConfig.environment,
           sabpaisaEnabled,
+          sabpaisaCrypto: getSabpaisaCryptoMeta(sabpaisaConfig),
           appBaseUrl: sabpaisaConfig.urls.appBaseUrl || null,
           liveRefreshIntervalMs,
           matchStatusProvider,
@@ -872,7 +917,11 @@ export default {
               sabpaisaConfig.authKey,
               sabpaisaConfig.authIv
             );
-          } catch {
+          } catch (error) {
+            console.error("[sabpaisa] Failed to build encrypted checkout payload", {
+              message: error?.message || "Unknown error",
+              ...getSabpaisaCryptoMeta(sabpaisaConfig)
+            });
             return apiError("Unable to initiate SabPaisa checkout.", 502);
           }
 
@@ -972,7 +1021,11 @@ export default {
             sabpaisaConfig.authKey,
             sabpaisaConfig.authIv
           );
-        } catch {
+        } catch (error) {
+          console.error("[sabpaisa] Failed to build encrypted checkout payload", {
+            message: error?.message || "Unknown error",
+            ...getSabpaisaCryptoMeta(sabpaisaConfig)
+          });
           return apiError("Unable to initiate SabPaisa checkout.", 502);
         }
 
