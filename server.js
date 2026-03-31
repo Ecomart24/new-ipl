@@ -519,6 +519,36 @@ function finalizeOrder(orderReference) {
     return { ok: false, statusCode: 404, error: "Order reference not found or expired." };
   }
 
+  if (pending.legacy) {
+    pendingOrders.delete(orderReference);
+    return {
+      ok: true,
+      booking: {
+        bookingId: createBookingId(),
+        orderReference,
+        paymentId: pending.paymentId || null,
+        provider: "sabpaisa",
+        quantity: pending.quantity,
+        amountPaid: pending.pricing.total,
+        currency: pending.pricing.currency,
+        matchSlug: "legacy",
+        sectionId: "legacy",
+        purchasedAt: nowIso()
+      },
+      pending,
+      match: {
+        homeTeam: pending.legacy.matchTitle || "IPL Match",
+        awayTeam: "",
+        city: pending.legacy.city || "",
+        stadium: pending.legacy.stadium || "",
+        dateTime: nowIso()
+      },
+      section: {
+        label: pending.legacy.seatLabel || "Selected Seats"
+      }
+    };
+  }
+
   const sourceMatch = getMatchBySlug(pending.matchSlug);
   if (!sourceMatch) {
     pendingOrders.delete(orderReference);
@@ -588,12 +618,16 @@ function buildThankYouParams(finalized) {
 
   return new URLSearchParams({
     id: finalized.booking.bookingId,
-    match: `${finalized.match.homeTeam} vs ${finalized.match.awayTeam}`,
+    match:
+      finalized.pending?.legacy?.matchTitle ||
+      `${finalized.match.homeTeam} vs ${finalized.match.awayTeam}`,
     date: dateLabel,
     time: timeLabel,
     city: finalized.match.city,
     stadium: finalized.match.stadium,
-    seats: `${finalized.pending.quantity} x ${finalized.section.label}`,
+    seats:
+      finalized.pending?.legacy?.seatLabel ||
+      `${finalized.pending.quantity} x ${finalized.section.label}`,
     name: finalized.pending.buyer.name,
     email: finalized.pending.buyer.email,
     total: String(finalized.booking.amountPaid)
@@ -668,12 +702,138 @@ app.post(
       );
     }
 
+    const legacyCheckout = req.body?.legacyCheckout || null;
     const matchSlug = asString(req.body?.matchSlug);
     const sectionId = asString(req.body?.sectionId);
     const quantity = Number.parseInt(req.body?.quantity, 10);
     const { buyer, errors: buyerErrors } = validateBuyer(req.body?.buyer);
 
     const validationErrors = [...buyerErrors];
+    const orderReference = createOrderReference();
+    const callbackUrl = SABPAISA_CONFIG.urls.callbackUrl;
+
+    logSabpaisaDebug(
+      {
+        ...SABPAISA_CONFIG,
+        requestOrigin: getRequestOrigin(req)
+      },
+      {
+        event: "create-order",
+        orderReference,
+        domainUsed: SABPAISA_CONFIG.urls.appBaseUrl,
+        callbackUrl: SABPAISA_CONFIG.urls.callbackUrl,
+        successUrl: SABPAISA_CONFIG.urls.successUrl,
+        failureUrl: SABPAISA_CONFIG.urls.failureUrl,
+        webhookUrl: SABPAISA_CONFIG.urls.webhookUrl
+      }
+    );
+
+    if (legacyCheckout) {
+      const amount = Number(legacyCheckout.amount);
+      const legacyQuantity = Number.parseInt(legacyCheckout.quantity, 10) || 1;
+      const matchTitle = asString(legacyCheckout.matchTitle || "IPL Match");
+      const seatLabel = asString(legacyCheckout.seatLabel || "Selected Seats");
+      const city = asString(legacyCheckout.city || "");
+      const stadium = asString(legacyCheckout.stadium || "");
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        validationErrors.push("legacyCheckout.amount must be a valid number.");
+      }
+      if (!Number.isInteger(legacyQuantity) || legacyQuantity < 1 || legacyQuantity > 50) {
+        validationErrors.push("legacyCheckout.quantity must be between 1 and 50.");
+      }
+      if (!matchTitle) {
+        validationErrors.push("legacyCheckout.matchTitle is required.");
+      }
+
+      if (validationErrors.length > 0) {
+        throw new HttpError(400, "Validation failed.", validationErrors);
+      }
+
+      const pricing = {
+        unitPrice: Math.round((amount / legacyQuantity) * 100) / 100,
+        quantity: legacyQuantity,
+        subtotal: amount,
+        platformFee: 0,
+        gst: 0,
+        total: amount,
+        currency: CURRENCY
+      };
+
+      const gatewayPayload = new URLSearchParams({
+        payerName: buyer.name,
+        payerEmail: buyer.email,
+        payerMobile: buyer.phone,
+        clientTxnId: orderReference,
+        amount: pricing.total.toFixed(2),
+        amountType: pricing.currency,
+        clientCode: SABPAISA_CONFIG.clientCode,
+        transUserName: SABPAISA_CONFIG.transUserName,
+        transUserPassword: SABPAISA_CONFIG.transUserPassword,
+        callbackUrl,
+        channelId: SABPAISA_CONFIG.channelId,
+        udf1: matchTitle,
+        udf2: seatLabel,
+        udf3: String(legacyQuantity),
+        udf4: String(pricing.total)
+      }).toString();
+
+      let encData;
+      try {
+        const { encrypt } = await getSabpaisaCrypto();
+        encData = await encrypt(gatewayPayload, SABPAISA_CONFIG.authKey, SABPAISA_CONFIG.authIv);
+      } catch (error) {
+        throw new HttpError(502, "Unable to initiate SabPaisa checkout.");
+      }
+
+      pendingOrders.set(orderReference, {
+        mode: "sabpaisa",
+        orderReference,
+        quantity: legacyQuantity,
+        buyer,
+        pricing,
+        createdAt: Date.now(),
+        paymentId: null,
+        legacy: {
+          matchTitle,
+          seatLabel,
+          city,
+          stadium
+        }
+      });
+
+      return res.status(201).json({
+        mode: "sabpaisa",
+        orderReference,
+        match: {
+          slug: "legacy",
+          homeTeam: matchTitle,
+          awayTeam: "",
+          dateTime: nowIso(),
+          stadium,
+          city
+        },
+        section: {
+          id: "legacy",
+          label: seatLabel,
+          stand: "Selected Seats",
+          selectedUnitPrice: pricing.unitPrice
+        },
+        quantity: legacyQuantity,
+        pricing,
+        sabpaisa: {
+          gatewayUrl: SABPAISA_CONFIG.urls.gatewayUrl,
+          clientCode: SABPAISA_CONFIG.clientCode,
+          encData,
+          appBaseUrl: SABPAISA_CONFIG.urls.appBaseUrl,
+          callbackUrl: SABPAISA_CONFIG.urls.callbackUrl,
+          successUrl: SABPAISA_CONFIG.urls.successUrl,
+          failureUrl: SABPAISA_CONFIG.urls.failureUrl,
+          webhookUrl: SABPAISA_CONFIG.urls.webhookUrl
+        }
+      });
+    }
+
     if (!matchSlug) validationErrors.push("matchSlug is required.");
     if (!sectionId) validationErrors.push("sectionId is required.");
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 8) {
@@ -695,24 +855,6 @@ app.post(
     }
 
     const pricing = calculatePricing(section.dynamicPrice, quantity);
-    const orderReference = createOrderReference();
-    const callbackUrl = SABPAISA_CONFIG.urls.callbackUrl;
-
-    logSabpaisaDebug(
-      {
-        ...SABPAISA_CONFIG,
-        requestOrigin: getRequestOrigin(req)
-      },
-      {
-        event: "create-order",
-        orderReference,
-        domainUsed: SABPAISA_CONFIG.urls.appBaseUrl,
-        callbackUrl: SABPAISA_CONFIG.urls.callbackUrl,
-        successUrl: SABPAISA_CONFIG.urls.successUrl,
-        failureUrl: SABPAISA_CONFIG.urls.failureUrl,
-        webhookUrl: SABPAISA_CONFIG.urls.webhookUrl
-      }
-    );
 
     const gatewayPayload = new URLSearchParams({
       payerName: buyer.name,
