@@ -39,15 +39,6 @@ const asyncHandler =
   (req, res, next) =>
     Promise.resolve(handler(req, res, next)).catch(next);
 
-let sabpaisaCryptoPromise = null;
-
-async function getSabpaisaCrypto() {
-  if (!sabpaisaCryptoPromise) {
-    sabpaisaCryptoPromise = import("sabpaisa-encryption-package-gcm");
-  }
-  return sabpaisaCryptoPromise;
-}
-
 class HttpError extends Error {
   constructor(statusCode, message, details) {
     super(message);
@@ -119,6 +110,82 @@ function getSabpaisaCryptoMeta(config) {
     authIvLength: asString(config.authIv).length,
     authIvBytes: getBase64ByteLength(config.authIv)
   };
+}
+
+function bytesToUpperHex(buffer) {
+  return Buffer.from(buffer).toString("hex").toUpperCase();
+}
+
+function hexToBytes(value) {
+  return Buffer.from(asString(value), "hex");
+}
+
+function safeBufferEquals(left, right) {
+  if (!Buffer.isBuffer(left) || !Buffer.isBuffer(right) || left.length !== right.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(left, right);
+}
+
+function sabpaisaDecryptPayload(hexCiphertext, authKeyValue, authIvValue, suppressError = false) {
+  try {
+    const authKey = Buffer.from(authKeyValue, "base64");
+    const authIv = Buffer.from(authIvValue, "base64");
+    const fullMessage = hexToBytes(hexCiphertext);
+
+    if (fullMessage.length < 76) {
+      throw new Error("Invalid ciphertext");
+    }
+
+    const hmacReceived = fullMessage.subarray(0, 48);
+    const encryptedData = fullMessage.subarray(48);
+    const hmacCalculated = crypto.createHmac("sha384", authIv).update(encryptedData).digest();
+
+    if (!safeBufferEquals(hmacReceived, hmacCalculated)) {
+      throw new Error("HMAC validation failed");
+    }
+
+    const iv = encryptedData.subarray(0, 12);
+    const ciphertextWithTag = encryptedData.subarray(12);
+    const ciphertext = ciphertextWithTag.subarray(0, ciphertextWithTag.length - 16);
+    const tag = ciphertextWithTag.subarray(ciphertextWithTag.length - 16);
+
+    const decipher = crypto.createDecipheriv("aes-256-gcm", authKey, iv);
+    decipher.setAuthTag(tag);
+    const plaintext = Buffer.concat([
+      decipher.update(ciphertext),
+      decipher.final()
+    ]);
+
+    return plaintext.toString("utf8");
+  } catch (error) {
+    if (!suppressError) {
+      console.error("[sabpaisa] Decryption failed", {
+        message: error?.message || "Unknown error"
+      });
+    }
+    return hexCiphertext;
+  }
+}
+
+function sabpaisaEncryptPayload(plaintext, authKeyValue, authIvValue) {
+  if (!plaintext) {
+    return plaintext;
+  }
+
+  const authKey = Buffer.from(authKeyValue, "base64");
+  const authIv = Buffer.from(authIvValue, "base64");
+  const iv = authKey.subarray(0, 12);
+
+  const cipher = crypto.createCipheriv("aes-256-gcm", authKey, iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(String(plaintext), "utf8"),
+    cipher.final()
+  ]);
+  const tag = cipher.getAuthTag();
+  const encryptedMessage = Buffer.concat([iv, ciphertext, tag]);
+  const hmacCalculated = crypto.createHmac("sha384", authIv).update(encryptedMessage).digest();
+  return bytesToUpperHex(Buffer.concat([hmacCalculated, encryptedMessage]));
 }
 
 function clamp(value, min, max) {
@@ -852,8 +919,11 @@ app.post(
 
       let encData;
       try {
-        const { encrypt } = await getSabpaisaCrypto();
-        encData = await encrypt(gatewayPayload, SABPAISA_CONFIG.authKey, SABPAISA_CONFIG.authIv);
+        encData = sabpaisaEncryptPayload(
+          gatewayPayload,
+          SABPAISA_CONFIG.authKey,
+          SABPAISA_CONFIG.authIv
+        );
       } catch (error) {
         console.error("[sabpaisa] Failed to build encrypted checkout payload", {
           message: error?.message || "Unknown error",
@@ -952,8 +1022,11 @@ app.post(
 
     let encData;
     try {
-      const { encrypt } = await getSabpaisaCrypto();
-      encData = await encrypt(gatewayPayload, SABPAISA_CONFIG.authKey, SABPAISA_CONFIG.authIv);
+      encData = sabpaisaEncryptPayload(
+        gatewayPayload,
+        SABPAISA_CONFIG.authKey,
+        SABPAISA_CONFIG.authIv
+      );
     } catch (error) {
       console.error("[sabpaisa] Failed to build encrypted checkout payload", {
         message: error?.message || "Unknown error",
@@ -1045,8 +1118,11 @@ app.all([
 
   let payload;
   try {
-    const { decrypt } = await getSabpaisaCrypto();
-    const decrypted = await decrypt(encResponse, SABPAISA_CONFIG.authKey, SABPAISA_CONFIG.authIv);
+    const decrypted = sabpaisaDecryptPayload(
+      encResponse,
+      SABPAISA_CONFIG.authKey,
+      SABPAISA_CONFIG.authIv
+    );
     payload = Object.fromEntries(new URLSearchParams(String(decrypted || "")).entries());
   } catch (error) {
     redirectFailure("Unable to verify SabPaisa response.");
