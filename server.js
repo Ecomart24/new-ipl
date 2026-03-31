@@ -22,23 +22,9 @@ const LIVE_REFRESH_INTERVAL_MS = toInt(process.env.MATCH_STATUS_REFRESH_MS, 2000
 });
 const MATCH_STATUS_PROVIDER = asString(process.env.MATCH_STATUS_PROVIDER || "fallback");
 const CHECKOUT_PROVIDER = asString(process.env.CHECKOUT_PROVIDER || "sabpaisa").toLowerCase();
-
-const SABPAISA_CLIENT_CODE = asString(process.env.SABPAISA_CLIENT_CODE);
-const SABPAISA_TRANS_USER_NAME = asString(process.env.SABPAISA_TRANS_USER_NAME);
-const SABPAISA_TRANS_USER_PASSWORD = asString(process.env.SABPAISA_TRANS_USER_PASSWORD);
-const SABPAISA_AUTH_KEY = asString(process.env.SABPAISA_AUTH_KEY);
-const SABPAISA_AUTH_IV = asString(process.env.SABPAISA_AUTH_IV);
-const SABPAISA_ENV = asString(process.env.SABPAISA_ENV || "stag").toLowerCase();
-const SABPAISA_CALLBACK_BASE_URL = asString(process.env.SABPAISA_CALLBACK_BASE_URL);
-const SABPAISA_CHANNEL_ID = asString(process.env.SABPAISA_CHANNEL_ID || "web");
-
-const isSabpaisaConfigured = Boolean(
-  SABPAISA_CLIENT_CODE &&
-    SABPAISA_TRANS_USER_NAME &&
-    SABPAISA_TRANS_USER_PASSWORD &&
-    SABPAISA_AUTH_KEY &&
-    SABPAISA_AUTH_IV
-);
+const SABPAISA_CONFIG = getSabpaisaConfig(process.env);
+const SABPAISA_CONFIG_ERRORS = validateSabpaisaConfig(SABPAISA_CONFIG, CHECKOUT_PROVIDER);
+const isSabpaisaConfigured = isSabpaisaConfiguredForRuntime(SABPAISA_CONFIG);
 
 const soldStateBySection = new Map();
 const pendingOrders = new Map();
@@ -103,11 +89,48 @@ function normalizeBaseUrl(baseUrl) {
   return asString(baseUrl).replace(/\/+$/, "");
 }
 
-function getPublicBaseUrl(req) {
-  if (SABPAISA_CALLBACK_BASE_URL) {
-    return normalizeBaseUrl(SABPAISA_CALLBACK_BASE_URL);
-  }
+function isTrueLike(value) {
+  return ["1", "true", "yes", "on"].includes(asString(value).toLowerCase());
+}
 
+function isProductionSabpaisaEnvironment(value) {
+  return ["prod", "production", "live"].includes(asString(value).toLowerCase());
+}
+
+function getSabpaisaGatewayUrl(environment) {
+  if (isProductionSabpaisaEnvironment(environment)) {
+    return "https://securepay.sabpaisa.in/SabPaisa/sabPaisaInit?v=1";
+  }
+  if (asString(environment).toLowerCase() === "uat") {
+    return "https://secure.sabpaisa.in/SabPaisa/sabPaisaInit?v=1";
+  }
+  return "https://stage-securepay.sabpaisa.in/SabPaisa/sabPaisaInit?v=1";
+}
+
+function normalizeAbsoluteUrl(value) {
+  const url = new URL(asString(value));
+  url.hash = "";
+  if (!url.pathname) {
+    url.pathname = "/";
+  } else if (url.pathname !== "/") {
+    url.pathname = url.pathname.replace(/\/+$/, "");
+  }
+  return url.toString();
+}
+
+function joinBaseUrl(baseUrl, relativePath = "") {
+  const normalizedBase = normalizeBaseUrl(baseUrl);
+  const base = new URL(`${normalizedBase}/`);
+  return new URL(relativePath.replace(/^\/+/, ""), base).toString();
+}
+
+function buildFailureUrl(baseUrl) {
+  const target = new URL(joinBaseUrl(baseUrl));
+  target.searchParams.set("payment", "failed");
+  return target.toString();
+}
+
+function getRequestOrigin(req) {
   const forwardedProto = asString(req.headers["x-forwarded-proto"]).split(",")[0].trim();
   const forwardedHost = asString(req.headers["x-forwarded-host"]).split(",")[0].trim();
   const protocol = forwardedProto || req.protocol || "http";
@@ -115,14 +138,252 @@ function getPublicBaseUrl(req) {
   return `${protocol}://${host}`;
 }
 
-function getSabpaisaGatewayUrl(env) {
-  if (env === "prod" || env === "production" || env === "live") {
-    return "https://securepay.sabpaisa.in/SabPaisa/sabPaisaInit?v=1";
+function getAppEnvironmentName(env, sabpaisaEnvironment) {
+  const explicit = asString(env.NODE_ENV || env.APP_ENV);
+  if (explicit) return explicit.toLowerCase();
+  return isProductionSabpaisaEnvironment(sabpaisaEnvironment) ? "production" : "development";
+}
+
+function looksLikeIpAddress(hostname) {
+  const normalized = asString(hostname).toLowerCase();
+  if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(normalized)) return true;
+  return normalized.includes(":") && /^[0-9a-f:]+$/i.test(normalized);
+}
+
+function isTemporaryPlatformHost(hostname) {
+  const normalized = asString(hostname).toLowerCase();
+  const suffixes = [
+    ".workers.dev",
+    ".pages.dev",
+    ".vercel.app",
+    ".netlify.app",
+    ".onrender.com",
+    ".railway.app",
+    ".up.railway.app",
+    ".github.io",
+    ".ngrok-free.app",
+    ".ngrok.io",
+    ".loca.lt"
+  ];
+  return suffixes.some((suffix) => normalized.endsWith(suffix));
+}
+
+function isUnsafeProductionHost(hostname) {
+  const normalized = asString(hostname).toLowerCase();
+  return (
+    !normalized ||
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized === "0.0.0.0" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    looksLikeIpAddress(normalized) ||
+    isTemporaryPlatformHost(normalized)
+  );
+}
+
+function parseUrlOrNull(value) {
+  try {
+    return new URL(asString(value));
+  } catch {
+    return null;
   }
-  if (env === "uat") {
-    return "https://secure.sabpaisa.in/SabPaisa/sabPaisaInit?v=1";
+}
+
+function validateConfiguredUrl(errors, label, value, options) {
+  const parsed = parseUrlOrNull(value);
+  if (!parsed) {
+    errors.push(`${label} must be a valid absolute URL.`);
+    return;
   }
-  return "https://stage-securepay.sabpaisa.in/SabPaisa/sabPaisaInit?v=1";
+
+  if (options.requireHttps && parsed.protocol !== "https:") {
+    errors.push(`${label} must use HTTPS in production.`);
+  }
+
+  if (options.expectedHost && parsed.hostname !== options.expectedHost) {
+    errors.push(`${label} must use the same hostname as APP_BASE_URL (${options.expectedHost}).`);
+  }
+
+  if (options.requirePublicHost && isUnsafeProductionHost(parsed.hostname)) {
+    errors.push(
+      `${label} must use your live public domain, not localhost, an IP address, or a preview host.`
+    );
+  }
+}
+
+function validateGatewayUrl(errors, config) {
+  const parsed = parseUrlOrNull(config.urls.gatewayUrl);
+  if (!parsed) {
+    errors.push("SABPAISA_BASE_URL must be a valid absolute URL.");
+    return;
+  }
+
+  const expectedHost = isProductionSabpaisaEnvironment(config.environment)
+    ? "securepay.sabpaisa.in"
+    : config.environment === "uat"
+      ? "secure.sabpaisa.in"
+      : "stage-securepay.sabpaisa.in";
+
+  if (parsed.hostname !== expectedHost) {
+    errors.push(
+      `SABPAISA_BASE_URL host ${parsed.hostname} does not match SABPAISA_ENV=${config.environment}. Expected ${expectedHost}.`
+    );
+  }
+}
+
+function getSabpaisaConfig(env, req) {
+  const environment = asString(env.SABPAISA_ENV || "stag").toLowerCase();
+  const requestOrigin = req ? getRequestOrigin(req) : "";
+  const appEnvironment = getAppEnvironmentName(env, environment);
+  const appBaseSource =
+    asString(env.APP_BASE_URL) ||
+    asString(env.SABPAISA_CALLBACK_BASE_URL) ||
+    (appEnvironment === "production" ? "" : requestOrigin);
+  const appBaseUrl = appBaseSource ? normalizeBaseUrl(appBaseSource) : "";
+  const gatewayUrl = asString(env.SABPAISA_BASE_URL) || getSabpaisaGatewayUrl(environment);
+  const callbackUrl = appBaseUrl
+    ? normalizeAbsoluteUrl(
+        asString(env.SABPAISA_CALLBACK_URL) ||
+          joinBaseUrl(appBaseUrl, "api/checkout/sabpaisa/response")
+      )
+    : "";
+  const successUrl = appBaseUrl
+    ? normalizeAbsoluteUrl(
+        asString(env.SABPAISA_SUCCESS_URL) || joinBaseUrl(appBaseUrl, "thankyou.html")
+      )
+    : "";
+  const failureUrl = appBaseUrl
+    ? normalizeAbsoluteUrl(asString(env.SABPAISA_FAILURE_URL) || buildFailureUrl(appBaseUrl))
+    : "";
+  const webhookUrl = appBaseUrl
+    ? normalizeAbsoluteUrl(
+        asString(env.SABPAISA_WEBHOOK_URL) ||
+          asString(env.SABPAISA_CALLBACK_URL) ||
+          joinBaseUrl(appBaseUrl, "api/checkout/sabpaisa/response")
+      )
+    : "";
+
+  return {
+    merchantId: asString(env.SABPAISA_MERCHANT_ID),
+    clientCode: asString(env.SABPAISA_CLIENT_CODE || env.SABPAISA_MERCHANT_ID),
+    transUserName: asString(env.SABPAISA_USERNAME || env.SABPAISA_TRANS_USER_NAME),
+    transUserPassword: asString(env.SABPAISA_PASSWORD || env.SABPAISA_TRANS_USER_PASSWORD),
+    authKey: asString(env.SABPAISA_KEY || env.SABPAISA_AUTH_KEY),
+    authIv: asString(env.SABPAISA_IV || env.SABPAISA_AUTH_IV),
+    environment,
+    appEnvironment,
+    channelId: asString(env.SABPAISA_CHANNEL_ID || "web"),
+    debug: isTrueLike(env.SABPAISA_DEBUG),
+    requestOrigin,
+    urls: {
+      appBaseUrl,
+      callbackUrl,
+      successUrl,
+      failureUrl,
+      webhookUrl,
+      gatewayUrl
+    }
+  };
+}
+
+function isSabpaisaConfiguredForRuntime(config) {
+  return Boolean(
+    config.clientCode &&
+      config.transUserName &&
+      config.transUserPassword &&
+      config.authKey &&
+      config.authIv
+  );
+}
+
+function validateSabpaisaConfig(config, checkoutProvider) {
+  const errors = [];
+
+  if (checkoutProvider !== "sabpaisa") {
+    return errors;
+  }
+
+  if (!config.clientCode) errors.push("SABPAISA_CLIENT_CODE is required.");
+  if (!config.transUserName) errors.push("SABPAISA_USERNAME is required.");
+  if (!config.transUserPassword) errors.push("SABPAISA_PASSWORD is required.");
+  if (!config.authKey) errors.push("SABPAISA_KEY is required.");
+  if (!config.authIv) errors.push("SABPAISA_AUTH_IV is required.");
+  if (!config.urls.appBaseUrl) {
+    errors.push("APP_BASE_URL is required when SabPaisa checkout is enabled.");
+    return errors;
+  }
+
+  const appBaseUrl = parseUrlOrNull(config.urls.appBaseUrl);
+  if (!appBaseUrl) {
+    errors.push("APP_BASE_URL must be a valid absolute URL.");
+    return errors;
+  }
+
+  const requireHttps = config.appEnvironment === "production";
+  const requirePublicHost = config.appEnvironment === "production";
+
+  if (requireHttps && appBaseUrl.protocol !== "https:") {
+    errors.push("APP_BASE_URL must use HTTPS in production.");
+  }
+
+  if (requirePublicHost && isUnsafeProductionHost(appBaseUrl.hostname)) {
+    errors.push(
+      "APP_BASE_URL must use your live public domain, not localhost, an IP address, or a preview host."
+    );
+  }
+
+  validateConfiguredUrl(errors, "SABPAISA_CALLBACK_URL", config.urls.callbackUrl, {
+    expectedHost: appBaseUrl.hostname,
+    requireHttps,
+    requirePublicHost
+  });
+  validateConfiguredUrl(errors, "SABPAISA_SUCCESS_URL", config.urls.successUrl, {
+    expectedHost: appBaseUrl.hostname,
+    requireHttps,
+    requirePublicHost
+  });
+  validateConfiguredUrl(errors, "SABPAISA_FAILURE_URL", config.urls.failureUrl, {
+    expectedHost: appBaseUrl.hostname,
+    requireHttps,
+    requirePublicHost
+  });
+  validateConfiguredUrl(errors, "SABPAISA_WEBHOOK_URL", config.urls.webhookUrl, {
+    expectedHost: appBaseUrl.hostname,
+    requireHttps,
+    requirePublicHost
+  });
+  validateGatewayUrl(errors, config);
+
+  return errors;
+}
+
+function logSabpaisaDebug(config, details = {}) {
+  if (!config.debug) return;
+
+  const configuredHost = parseUrlOrNull(config.urls.appBaseUrl)?.hostname || "";
+  const requestHost = parseUrlOrNull(config.requestOrigin)?.hostname || "";
+
+  console.log(
+    JSON.stringify({
+      tag: "sabpaisa",
+      environment: config.environment,
+      appEnvironment: config.appEnvironment,
+      requestOrigin: config.requestOrigin,
+      configuredAppBaseUrl: config.urls.appBaseUrl,
+      callbackUrl: config.urls.callbackUrl,
+      successUrl: config.urls.successUrl,
+      failureUrl: config.urls.failureUrl,
+      webhookUrl: config.urls.webhookUrl,
+      gatewayUrl: config.urls.gatewayUrl,
+      hostMismatch: Boolean(configuredHost && requestHost && configuredHost !== requestHost),
+      ...details
+    })
+  );
+}
+
+if (CHECKOUT_PROVIDER === "sabpaisa" && SABPAISA_CONFIG.appEnvironment === "production" && SABPAISA_CONFIG_ERRORS.length > 0) {
+  throw new Error(`Invalid SabPaisa configuration: ${SABPAISA_CONFIG_ERRORS.join(" | ")}`);
 }
 
 function initializeSoldState() {
@@ -337,16 +598,30 @@ function buildThankYouParams(finalized) {
 }
 
 app.get("/api/config", (req, res) => {
-  res.json({
+  const payload = {
     checkoutProvider: "sabpaisa",
     checkoutFallbackFrom: null,
     razorpayKeyId: null,
-    sabpaisaEnv: SABPAISA_ENV,
+    sabpaisaEnv: SABPAISA_CONFIG.environment,
     sabpaisaEnabled: isSabpaisaConfigured,
+    appBaseUrl: SABPAISA_CONFIG.urls.appBaseUrl || null,
     liveRefreshIntervalMs: LIVE_REFRESH_INTERVAL_MS,
     matchStatusProvider: MATCH_STATUS_PROVIDER,
-    currency: CURRENCY
-  });
+    currency: CURRENCY,
+    sabpaisaConfigErrors: SABPAISA_CONFIG_ERRORS
+  };
+
+  if (SABPAISA_CONFIG.debug) {
+    payload.sabpaisaUrls = {
+      gatewayUrl: SABPAISA_CONFIG.urls.gatewayUrl,
+      callbackUrl: SABPAISA_CONFIG.urls.callbackUrl,
+      successUrl: SABPAISA_CONFIG.urls.successUrl,
+      failureUrl: SABPAISA_CONFIG.urls.failureUrl,
+      webhookUrl: SABPAISA_CONFIG.urls.webhookUrl
+    };
+  }
+
+  res.json(payload);
 });
 
 app.get("/api/matches", (req, res) => {
@@ -371,8 +646,23 @@ app.post(
       throw new HttpError(503, "Only SabPaisa checkout is enabled on this server.");
     }
 
+    if (SABPAISA_CONFIG_ERRORS.length > 0) {
+      throw new HttpError(500, "Invalid SabPaisa configuration.", SABPAISA_CONFIG_ERRORS);
+    }
+
     if (!isSabpaisaConfigured) {
       throw new HttpError(500, "SabPaisa credentials are missing in environment variables.");
+    }
+
+    if (
+      SABPAISA_CONFIG.appEnvironment === "production" &&
+      parseUrlOrNull(getRequestOrigin(req))?.hostname !==
+        parseUrlOrNull(SABPAISA_CONFIG.urls.appBaseUrl)?.hostname
+    ) {
+      throw new HttpError(
+        409,
+        `SabPaisa checkout must be initiated from ${SABPAISA_CONFIG.urls.appBaseUrl}.`
+      );
     }
 
     const matchSlug = asString(req.body?.matchSlug);
@@ -403,7 +693,24 @@ app.post(
 
     const pricing = calculatePricing(section.dynamicPrice, quantity);
     const orderReference = createOrderReference();
-    const callbackUrl = `${getPublicBaseUrl(req)}/api/checkout/sabpaisa/response`;
+    const callbackUrl = SABPAISA_CONFIG.urls.callbackUrl;
+
+    logSabpaisaDebug(
+      {
+        ...SABPAISA_CONFIG,
+        requestOrigin: getRequestOrigin(req)
+      },
+      {
+        event: "create-order",
+        orderReference,
+        domainUsed: SABPAISA_CONFIG.urls.appBaseUrl,
+        callbackUrl: SABPAISA_CONFIG.urls.callbackUrl,
+        successUrl: SABPAISA_CONFIG.urls.successUrl,
+        failureUrl: SABPAISA_CONFIG.urls.failureUrl,
+        webhookUrl: SABPAISA_CONFIG.urls.webhookUrl
+      }
+    );
+
     const gatewayPayload = new URLSearchParams({
       payerName: buyer.name,
       payerEmail: buyer.email,
@@ -411,11 +718,11 @@ app.post(
       clientTxnId: orderReference,
       amount: pricing.total.toFixed(2),
       amountType: pricing.currency,
-      clientCode: SABPAISA_CLIENT_CODE,
-      transUserName: SABPAISA_TRANS_USER_NAME,
-      transUserPassword: SABPAISA_TRANS_USER_PASSWORD,
+      clientCode: SABPAISA_CONFIG.clientCode,
+      transUserName: SABPAISA_CONFIG.transUserName,
+      transUserPassword: SABPAISA_CONFIG.transUserPassword,
       callbackUrl,
-      channelId: SABPAISA_CHANNEL_ID,
+      channelId: SABPAISA_CONFIG.channelId,
       udf1: match.slug,
       udf2: section.id,
       udf3: String(quantity),
@@ -424,7 +731,7 @@ app.post(
 
     let encData;
     try {
-      encData = sabpaisaEncrypt(gatewayPayload, SABPAISA_AUTH_KEY, SABPAISA_AUTH_IV);
+      encData = sabpaisaEncrypt(gatewayPayload, SABPAISA_CONFIG.authKey, SABPAISA_CONFIG.authIv);
     } catch (error) {
       throw new HttpError(502, "Unable to initiate SabPaisa checkout.");
     }
@@ -461,22 +768,35 @@ app.post(
       quantity,
       pricing,
       sabpaisa: {
-        gatewayUrl: getSabpaisaGatewayUrl(SABPAISA_ENV),
-        clientCode: SABPAISA_CLIENT_CODE,
-        encData
+        gatewayUrl: SABPAISA_CONFIG.urls.gatewayUrl,
+        clientCode: SABPAISA_CONFIG.clientCode,
+        encData,
+        appBaseUrl: SABPAISA_CONFIG.urls.appBaseUrl,
+        callbackUrl: SABPAISA_CONFIG.urls.callbackUrl,
+        successUrl: SABPAISA_CONFIG.urls.successUrl,
+        failureUrl: SABPAISA_CONFIG.urls.failureUrl,
+        webhookUrl: SABPAISA_CONFIG.urls.webhookUrl
       }
     });
   })
 );
 
-app.all("/api/checkout/sabpaisa/response", (req, res) => {
+app.all([
+  "/api/checkout/sabpaisa/response",
+  "/api/payments/sabpaisa/callback",
+  "/api/payments/sabpaisa/webhook"
+], (req, res) => {
   const redirectFailure = (reason) => {
-    const params = new URLSearchParams({
-      payment: "failed",
-      reason: asString(reason || "Payment failed.")
-    });
-    res.redirect(`/?${params.toString()}`);
+    const target = new URL(SABPAISA_CONFIG.urls.failureUrl);
+    target.searchParams.set("payment", "failed");
+    target.searchParams.set("reason", asString(reason || "Payment failed."));
+    res.redirect(target.toString());
   };
+
+  if (SABPAISA_CONFIG_ERRORS.length > 0) {
+    redirectFailure("Invalid SabPaisa configuration on this server.");
+    return;
+  }
 
   if (!isSabpaisaConfigured) {
     redirectFailure("SabPaisa is not configured on this server.");
@@ -499,7 +819,7 @@ app.all("/api/checkout/sabpaisa/response", (req, res) => {
 
   let payload;
   try {
-    const decrypted = sabpaisaDecrypt(encResponse, SABPAISA_AUTH_KEY, SABPAISA_AUTH_IV);
+    const decrypted = sabpaisaDecrypt(encResponse, SABPAISA_CONFIG.authKey, SABPAISA_CONFIG.authIv);
     payload = Object.fromEntries(new URLSearchParams(String(decrypted || "")).entries());
   } catch (error) {
     redirectFailure("Unable to verify SabPaisa response.");
@@ -549,7 +869,24 @@ app.all("/api/checkout/sabpaisa/response", (req, res) => {
   }
 
   const params = buildThankYouParams(finalized);
-  res.redirect(`/thankyou.html?${params.toString()}`);
+  const target = new URL(SABPAISA_CONFIG.urls.successUrl);
+  target.search = params.toString();
+  res.redirect(target.toString());
+});
+
+app.get("/payment/success", (req, res) => {
+  const target = new URL("/thankyou.html", getRequestOrigin(req));
+  target.search = new URLSearchParams(req.query).toString();
+  res.redirect(target.toString());
+});
+
+app.get("/payment/failure", (req, res) => {
+  const target = new URL("/", getRequestOrigin(req));
+  target.search = new URLSearchParams(req.query).toString();
+  if (!target.searchParams.has("payment")) {
+    target.searchParams.set("payment", "failed");
+  }
+  res.redirect(target.toString());
 });
 
 app.post("/api/checkout/verify", (req, res) => {
@@ -604,6 +941,6 @@ setInterval(cleanupPendingOrders, 60_000).unref();
 
 app.listen(PORT, () => {
   console.log(
-    `[server] running on http://localhost:${PORT} | checkout=sabpaisa | env=${SABPAISA_ENV} | configured=${isSabpaisaConfigured}`
+    `[server] running on http://localhost:${PORT} | checkout=sabpaisa | env=${SABPAISA_CONFIG.environment} | appBaseUrl=${SABPAISA_CONFIG.urls.appBaseUrl || "unset"} | configured=${isSabpaisaConfigured}`
   );
 });

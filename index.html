@@ -1327,17 +1327,13 @@
             </div>
 
             <div class="form-group">
-              <label>Payment Method</label>
-              <select id="paymentMethod">
-                <option value="razorpay">Razorpay</option>
-                <option value="upi">UPI</option>
-                <option value="card">Card</option>
-              </select>
+              <label>Phone</label>
+              <input type="tel" id="buyerPhone" placeholder="Enter your phone number" />
             </div>
 
             <button class="pay-btn" id="payNowBtn">Proceed to Pay</button>
             <p class="note">
-              This is demo frontend logic. For real payment gateway, connect Razorpay or another payment service from backend.
+              Secure checkout powered by backend SabPaisa integration.
             </p>
           </div>
         </div>
@@ -1499,7 +1495,7 @@
 
     const buyerName = document.getElementById("buyerName");
     const buyerEmail = document.getElementById("buyerEmail");
-    const paymentMethod = document.getElementById("paymentMethod");
+    const buyerPhone = document.getElementById("buyerPhone");
     const payNowBtn = document.getElementById("payNowBtn");
     const toast = document.getElementById("toast");
     const drawerStatus = document.getElementById("drawerStatus");
@@ -1536,6 +1532,33 @@
       setTimeout(() => {
         toast.classList.remove("show");
       }, 2500);
+    }
+
+    async function apiRequest(url, options = {}) {
+      const response = await fetch(url, options);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || "Request failed");
+      }
+      return payload;
+    }
+
+    function postToGateway(url, fields) {
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = url;
+      form.style.display = "none";
+
+      Object.entries(fields || {}).forEach(([name, value]) => {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        input.value = String(value ?? "");
+        form.appendChild(input);
+      });
+
+      document.body.appendChild(form);
+      form.submit();
     }
 
     function statusFromApi(rawStatus) {
@@ -2653,7 +2676,7 @@
       updateSummary();
     });
 
-    payNowBtn.addEventListener("click", () => {
+    payNowBtn.addEventListener("click", async () => {
       if (!currentEvent) {
         showToast("Please choose a match first");
         return;
@@ -2674,29 +2697,57 @@
         return;
       }
 
+      const phone = buyerPhone.value.trim();
+      if (!/^[0-9+\-\s]{8,15}$/.test(phone)) {
+        showToast("Enter a valid phone number");
+        return;
+      }
+
       const selectedItems = getSelectedSeatItems();
       const total = selectedItems.reduce((sum, seat) => sum + seat.price, 0);
       const seatLabel = selectedItems
         .map((seat) => `${seat.id} (${formatInr(seat.price).replace("INR ", "")})`)
         .join(", ");
-      showToast(`Payment success demo: ${formatInr(total)} via ${paymentMethod.value}`);
 
-      setTimeout(() => {
-        const bookingId = `IPL-${Date.now()}`;
-        const params = new URLSearchParams({
-          id: bookingId,
-          match: currentEvent.title,
-          date: currentEvent.dateKey || "",
-          time: currentEvent.time || "",
-          city: currentEvent.city || "",
-          stadium: currentEvent.stadium || "",
-          seats: seatLabel,
-          total: String(total),
-          name: buyerName.value.trim(),
-          email: buyerEmail.value.trim()
+      payNowBtn.disabled = true;
+      const originalLabel = payNowBtn.textContent;
+      payNowBtn.textContent = "Preparing payment...";
+
+      try {
+        const order = await apiRequest("/api/checkout/create-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            buyer: {
+              name: buyerName.value.trim(),
+              email: buyerEmail.value.trim(),
+              phone
+            },
+            legacyCheckout: {
+              matchTitle: currentEvent.title,
+              city: currentEvent.city || "",
+              stadium: currentEvent.stadium || "",
+              seatLabel,
+              quantity: selectedItems.length,
+              amount: total
+            }
+          })
         });
-        window.location.href = `thankyou.html?${params.toString()}`;
-      }, 300);
+
+        const gatewayUrl = order?.sabpaisa?.gatewayUrl;
+        const clientCode = order?.sabpaisa?.clientCode;
+        const encData = order?.sabpaisa?.encData;
+        if (!gatewayUrl || !clientCode || !encData) {
+          throw new Error("SabPaisa initiation payload is incomplete.");
+        }
+
+        payNowBtn.textContent = "Redirecting to SabPaisa...";
+        postToGateway(gatewayUrl, { encData, clientCode });
+      } catch (error) {
+        showToast(error.message || "Unable to initiate payment.");
+        payNowBtn.disabled = false;
+        payNowBtn.textContent = originalLabel;
+      }
     });
 
     async function fetchSeasonMatches(season) {

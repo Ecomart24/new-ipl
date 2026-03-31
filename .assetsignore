@@ -1,0 +1,12 @@
+.git/
+.env
+.env.*
+.gitignore
+node_modules/
+data/
+server.js
+package.json
+package-lock.json
+README.md
+worker.js
+wrangler.jsonc

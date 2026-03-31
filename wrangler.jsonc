@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "viagoco-ipl",
+  "main": "worker.js",
+  "workers_dev": true,
+  "compatibility_date": "2026-03-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    {
+      "pattern": "viagoco.com/*",
+      "zone_name": "viagoco.com"
+    },
+    {
+      "pattern": "www.viagoco.com/*",
+      "zone_name": "viagoco.com"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "ORDERS_KV",
+      "id": "d795219f73b547298c7a2b3f93b63a17"
+    }
+  ],
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
+    "not_found_handling": "404-page"
+  }
+}
