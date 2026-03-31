@@ -5,7 +5,6 @@ const path = require("path");
 
 const dotenv = require("dotenv");
 const express = require("express");
-const { encrypt: sabpaisaEncrypt, decrypt: sabpaisaDecrypt } = require("sabpaisa-encryption-package-gcm");
 
 const { getAllMatches, getMatchBySlug } = require("./data/matches");
 
@@ -39,6 +38,15 @@ const asyncHandler =
   (handler) =>
   (req, res, next) =>
     Promise.resolve(handler(req, res, next)).catch(next);
+
+let sabpaisaCryptoPromise = null;
+
+async function getSabpaisaCrypto() {
+  if (!sabpaisaCryptoPromise) {
+    sabpaisaCryptoPromise = import("sabpaisa-encryption-package-gcm");
+  }
+  return sabpaisaCryptoPromise;
+}
 
 class HttpError extends Error {
   constructor(statusCode, message, details) {
@@ -731,7 +739,8 @@ app.post(
 
     let encData;
     try {
-      encData = sabpaisaEncrypt(gatewayPayload, SABPAISA_CONFIG.authKey, SABPAISA_CONFIG.authIv);
+      const { encrypt } = await getSabpaisaCrypto();
+      encData = await encrypt(gatewayPayload, SABPAISA_CONFIG.authKey, SABPAISA_CONFIG.authIv);
     } catch (error) {
       throw new HttpError(502, "Unable to initiate SabPaisa checkout.");
     }
@@ -785,7 +794,7 @@ app.all([
   "/api/checkout/sabpaisa/response",
   "/api/payments/sabpaisa/callback",
   "/api/payments/sabpaisa/webhook"
-], (req, res) => {
+], asyncHandler(async (req, res) => {
   const redirectFailure = (reason) => {
     const target = new URL(SABPAISA_CONFIG.urls.failureUrl);
     target.searchParams.set("payment", "failed");
@@ -819,7 +828,8 @@ app.all([
 
   let payload;
   try {
-    const decrypted = sabpaisaDecrypt(encResponse, SABPAISA_CONFIG.authKey, SABPAISA_CONFIG.authIv);
+    const { decrypt } = await getSabpaisaCrypto();
+    const decrypted = await decrypt(encResponse, SABPAISA_CONFIG.authKey, SABPAISA_CONFIG.authIv);
     payload = Object.fromEntries(new URLSearchParams(String(decrypted || "")).entries());
   } catch (error) {
     redirectFailure("Unable to verify SabPaisa response.");
@@ -872,7 +882,7 @@ app.all([
   const target = new URL(SABPAISA_CONFIG.urls.successUrl);
   target.search = params.toString();
   res.redirect(target.toString());
-});
+}));
 
 app.get("/payment/success", (req, res) => {
   const target = new URL("/thankyou.html", getRequestOrigin(req));
