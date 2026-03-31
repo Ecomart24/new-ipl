@@ -248,11 +248,6 @@ function isTemporaryPlatformHost(hostname) {
   const suffixes = [
     ".workers.dev",
     ".pages.dev",
-    ".vercel.app",
-    ".netlify.app",
-    ".onrender.com",
-    ".railway.app",
-    ".up.railway.app",
     ".github.io",
     ".ngrok-free.app",
     ".ngrok.io",
