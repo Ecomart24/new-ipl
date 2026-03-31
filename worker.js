@@ -21,6 +21,32 @@ function toInt(value, fallback, options = {}) {
   return parsed;
 }
 
+function toFlexibleNumber(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : Number.NaN;
+  }
+
+  const normalized = asString(value).replace(/,/g, "").replace(/[^\d.-]/g, "");
+  if (!normalized) {
+    return Number.NaN;
+  }
+
+  return Number.parseFloat(normalized);
+}
+
+function toFlexibleInteger(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  const normalized = asString(value).replace(/[^\d-]/g, "");
+  if (!normalized) {
+    return Number.NaN;
+  }
+
+  return Number.parseInt(normalized, 10);
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -789,8 +815,9 @@ export default {
         });
 
         if (legacyCheckout) {
-          const amount = Number(legacyCheckout.amount);
-          const legacyQuantity = Number.parseInt(legacyCheckout.quantity, 10) || 1;
+          const amount = toFlexibleNumber(legacyCheckout.amount);
+          const parsedLegacyQuantity = toFlexibleInteger(legacyCheckout.quantity);
+          const legacyQuantity = Number.isInteger(parsedLegacyQuantity) ? parsedLegacyQuantity : 1;
           const matchTitle = asString(legacyCheckout.matchTitle || "IPL Match");
           const seatLabel = asString(legacyCheckout.seatLabel || "Selected Seats");
           const city = asString(legacyCheckout.city || "");

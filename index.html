@@ -1538,7 +1538,10 @@
       const response = await fetch(url, options);
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.error || "Request failed");
+        const detailText = Array.isArray(payload.details) && payload.details.length
+          ? ` ${payload.details.join(" ")}`
+          : "";
+        throw new Error(`${payload.error || "Request failed"}${detailText}`.trim());
       }
       return payload;
     }
@@ -2567,13 +2570,18 @@
       return seatData.filter((seat) => selectedSeats.includes(seat.id));
     }
 
+    function toSeatPrice(value) {
+      const numeric = Number(String(value ?? "").replace(/,/g, "").replace(/[^\d.-]/g, ""));
+      return Number.isFinite(numeric) ? numeric : 0;
+    }
+
     function updateSummary() {
       const items = getSelectedSeatItems();
       const count = items.length;
-      const total = items.reduce((sum, seat) => sum + seat.price, 0);
-      const uniquePrices = [...new Set(items.map((seat) => seat.price))].sort((a, b) => a - b);
+      const total = items.reduce((sum, seat) => sum + toSeatPrice(seat.price), 0);
+      const uniquePrices = [...new Set(items.map((seat) => toSeatPrice(seat.price)))].sort((a, b) => a - b);
       const seatLabel = items
-        .map((seat) => `${seat.id} (${formatInr(seat.price).replace("INR ", "")})`)
+        .map((seat) => `${seat.id} (${formatInr(toSeatPrice(seat.price)).replace("INR ", "")})`)
         .join(", ");
 
       let perSeatText = "INR 0";
@@ -2704,9 +2712,9 @@
       }
 
       const selectedItems = getSelectedSeatItems();
-      const total = selectedItems.reduce((sum, seat) => sum + seat.price, 0);
+      const total = selectedItems.reduce((sum, seat) => sum + toSeatPrice(seat.price), 0);
       const seatLabel = selectedItems
-        .map((seat) => `${seat.id} (${formatInr(seat.price).replace("INR ", "")})`)
+        .map((seat) => `${seat.id} (${formatInr(toSeatPrice(seat.price)).replace("INR ", "")})`)
         .join(", ");
 
       payNowBtn.disabled = true;
@@ -2729,7 +2737,7 @@
               stadium: currentEvent.stadium || "",
               seatLabel,
               quantity: selectedItems.length,
-              amount: total
+              amount: Number(total.toFixed(2))
             }
           })
         });
